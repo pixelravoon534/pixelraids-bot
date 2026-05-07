@@ -1,6 +1,8 @@
 const {
   Client,
   GatewayIntentBits,
+  PermissionsBitField,
+  ChannelType,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -26,25 +28,13 @@ client.once("ready", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
 
-// ================= SMART PARSER =================
-
-function parseHost(input) {
-  if (!input) return "Unknown";
-  const c = input.toLowerCase();
-
-  if (c.includes("y")) return "Yes"; // y, yes, yass, yesss
-  if (c.includes("n")) return "No";  // n, no, nope
-
-  return input; // raw fallback
-}
-
-// ================= !SURVEY =================
+// ================= !SURVEY (BUTTON IN ORIGINAL CHAT) =================
 
 client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
 
-  if (message.content.trim() === "!survey") {
+  if (message.content === "!survey") {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -60,132 +50,110 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ================= SURVEY FLOW =================
+// ================= BUTTON -> CREATE PRIVATE CHANNEL =================
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!interaction.isButton()) return;
 
+  if (interaction.customId !== "start_survey") return;
+
   const user = interaction.user;
-  const channel = interaction.channel;
+  const guild = interaction.guild;
 
-  // ================= START =================
+  await interaction.reply({
+    content: "Creating your private survey channel...",
+    ephemeral: true
+  });
 
-  if (interaction.customId === "start_survey") {
+  // ================= CREATE PRIVATE CHANNEL =================
 
-    await interaction.reply({
-      content: "Survey started!",
-      ephemeral: true
-    });
+  const channel = await guild.channels.create({
+    name: `survey-${user.username}`,
+    type: ChannelType.GuildText,
+    permissionOverwrites: [
+      {
+        id: guild.id,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      },
+      {
+        id: user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory
+        ]
+      },
+      {
+        id: client.user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ManageChannels
+        ]
+      }
+    ]
+  });
 
-    // ================= HOST =================
+  // ================= SURVEY =================
 
-    const hostRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("host_yes").setLabel("Yes").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("host_no").setLabel("No").setStyle(ButtonStyle.Secondary)
-    );
+  const ask = async (text) => {
+    await channel.send(text);
 
-    const hostMsg = await channel.send({
-      content: `1. Do you want to be the Host? <@${user.id}>`,
-      components: [hostRow]
-    });
-
-    const hostInteraction = await hostMsg.awaitMessageComponent({
-      filter: i => i.user.id === user.id,
-      time: 60000
-    }).catch(() => null);
-
-    if (!hostInteraction) return channel.send("Host question timed out.");
-
-    const hostRaw = hostInteraction.customId === "host_yes" ? "Yes" : "No";
-    const hostFinal = parseHost(hostRaw);
-
-    await hostInteraction.update({
-      content: `Host: ${hostRaw}`,
-      components: []
-    });
-
-    // ================= PACKAGE =================
-
-    const pkgRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("pkg_1").setLabel("1").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("pkg_2").setLabel("2").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("pkg_3").setLabel("3").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("pkg_u").setLabel("Unlimited").setStyle(ButtonStyle.Danger)
-    );
-
-    const pkgMsg = await channel.send({
-      content: `2. Select your package <@${user.id}> (check #important-info)`,
-      components: [pkgRow]
-    });
-
-    const pkgInteraction = await pkgMsg.awaitMessageComponent({
-      filter: i => i.user.id === user.id,
-      time: 60000
-    }).catch(() => null);
-
-    if (!pkgInteraction) return channel.send("Package timed out.");
-
-    let packageRaw = "1";
-
-    if (pkgInteraction.customId === "pkg_2") packageRaw = "2";
-    if (pkgInteraction.customId === "pkg_3") packageRaw = "3";
-    if (pkgInteraction.customId === "pkg_u") packageRaw = "Unlimited";
-
-    await pkgInteraction.update({
-      content: `Package: ${packageRaw}`,
-      components: []
-    });
-
-    // ================= RAID TYPE =================
-
-    await channel.send(`3. Select a raid <@${user.id}>`);
-
-    const raidCollected = await channel.awaitMessages({
+    const collected = await channel.awaitMessages({
       filter: m => m.author.id === user.id,
       max: 1,
       time: 180000
     });
 
-    const raidRaw = raidCollected.first()?.content || "Unknown";
+    return collected.first()?.content || "Unknown";
+  };
 
-    // ================= ROBLOX USERNAME =================
+  const hostRaw = await ask("1. Do you want to be the Host? (Yes / No / YASSS etc)");
+  const packageRaw = await ask("2. Select your package (1 / 2 / 3 / Unlimited)");
+  const raidRaw = await ask("3. Select a raid");
+  const robloxRaw = await ask("4. What is your Roblox Username?");
 
-    await channel.send(`4. What is your Roblox Username? <@${user.id}>`);
+  // ================= QUEUE =================
 
-    const robloxCollected = await channel.awaitMessages({
-      filter: m => m.author.id === user.id,
-      max: 1,
-      time: 180000
-    });
+  queue.push({
+    userId: user.id,
+    hostRaw,
+    packageRaw,
+    raidRaw,
+    robloxRaw
+  });
 
-    const robloxRaw = robloxCollected.first()?.content || "Unknown";
+  updateStats(guild);
 
-    // ================= QUEUE =================
+  await channel.send("Survey complete. You are added to the queue.");
 
-    queue.push({
-      userId: user.id,
-
-      hostRaw,
-      host: hostFinal,
-
-      packageRaw,
-      raidRaw,
-      robloxRaw
-    });
-
-    updateStats(interaction.guild);
-
-    channel.send(`<@${user.id}> has been added to the queue.`);
-  }
+  setTimeout(() => {
+    channel.delete().catch(() => {});
+  }, 5000);
 });
 
-// ================= STATS =================
+// ================= STATS (FIXED + BULLETPROOF) =================
 
 async function updateStats(guild) {
 
   const channel = guild.channels.cache.find(c => c.name === "queue-stats");
-  if (!channel) return;
+
+  if (!channel) {
+    console.log("[STATS ERROR] queue-stats channel NOT FOUND");
+    return;
+  }
+
+  const botMember = guild.members.me;
+
+  if (!channel.permissionsFor(botMember)?.has([
+    "ViewChannel",
+    "SendMessages",
+    "ReadMessageHistory"
+  ])) {
+    console.log("[STATS ERROR] missing permissions in queue-stats");
+    return;
+  }
 
   let text = "QUEUE STATS\n\n";
 
