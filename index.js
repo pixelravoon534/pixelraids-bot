@@ -278,10 +278,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ask("1. Do you want to be the Host?");
 
     const packageRaw =
-      await ask("2. Select your package (check important-info)");
+      await ask("2. How many Raids? 1 / 2 / 3");
 
     const raidRaw =
-      await ask("3. Select a raid");
+      await ask("3. Select a raid type");
 
     const robloxRaw =
       await ask("4. What is your Roblox Username?");
@@ -344,8 +344,8 @@ async function updateStats(guild) {
 
       text += `<@${entry.userId}> has submitted the survey\n`;
       text += `Host: ${entry.hostRaw}\n`;
-      text += `Package: ${entry.packageRaw}\n`;
-      text += `Raid: ${entry.raidRaw}\n`;
+      text += `Amount of Raids: ${entry.packageRaw}\n`;
+      text += `Raid Type: ${entry.raidRaw}\n`;
       text += `Roblox Username: ${entry.robloxRaw}\n\n`;
     }
   }
