@@ -32,15 +32,19 @@ let statsMessageId = null;
 
 // ================= READY =================
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
 
-// ================= !SURVEY =================
+// ================= MESSAGE COMMANDS =================
 
 client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
+
+  // =================================================
+  // !SURVEY (EVERYONE)
+  // =================================================
 
   if (message.content === "!survey") {
 
@@ -51,22 +55,28 @@ client.on("messageCreate", async (message) => {
         .setStyle(ButtonStyle.Primary)
     );
 
-    return message.channel.send({
-      content: "Click to start survey",
+    await message.channel.send({
+      content: "Click below to start your survey",
       components: [row]
     });
+
+    return;
   }
 
-  // ================= OWNER ONLY =================
+  // =================================================
+  // OWNER ONLY
+  // =================================================
 
   if (message.author.id !== OWNER_ID) return;
 
-  // ================= !STARTRAID =================
+  // =================================================
+  // !STARTRAID
+  // =================================================
 
   if (message.content === "!startraid") {
 
     if (message.channel.name !== ADMIN_CHANNEL_NAME) {
-      return message.reply("Use admin-control channel.");
+      return message.reply("Use this in admin-control.");
     }
 
     const raidChannel = await message.guild.channels.create({
@@ -77,6 +87,7 @@ client.on("messageCreate", async (message) => {
           id: message.guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
+
         {
           id: OWNER_ID,
           allow: [
@@ -86,30 +97,36 @@ client.on("messageCreate", async (message) => {
             PermissionsBitField.Flags.ManageChannels
           ]
         },
+
         {
           id: client.user.id,
           allow: [
             PermissionsBitField.Flags.ViewChannel,
             PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory,
             PermissionsBitField.Flags.ManageChannels
           ]
         }
       ]
     });
 
-    await raidChannel.send("Raid started.");
+    await raidChannel.send("Raid channel created.");
 
-    return message.reply(`Raid created: ${raidChannel}`);
+    await message.reply(`Raid created: ${raidChannel}`);
+
+    return;
   }
 
-  // ================= !ENDRAIDS (FIXED + DEBUG) =================
+  // =================================================
+  // !ENDRAIDS
+  // =================================================
 
   if (message.content === "!endraids") {
 
     console.log("🔥 ENDRAIDS TRIGGERED");
 
     if (!message.channel.name.startsWith("raid-")) {
-      console.log("❌ Not raid channel");
+      console.log("❌ NOT RAID CHANNEL");
       return message.reply("Use this inside a raid channel.");
     }
 
@@ -117,16 +134,21 @@ client.on("messageCreate", async (message) => {
       c => c.name === LOG_CHANNEL_NAME
     );
 
-    console.log("📌 Log channel:", logChannel?.name);
+    console.log("📌 LOG CHANNEL:", logChannel?.name);
 
     try {
 
-      const fetched = await message.channel.messages.fetch({ limit: 100 });
+      const fetched = await message.channel.messages.fetch({
+        limit: 100
+      });
 
       const mentions = fetched
         .map(m => m.mentions.users)
         .flatMap(u => [...u.values()])
-        .filter(u => u.id !== OWNER_ID && !u.bot);
+        .filter(u =>
+          u.id !== OWNER_ID &&
+          !u.bot
+        );
 
       const unique = [...new Map(
         mentions.map(u => [u.id, u])
@@ -135,36 +157,59 @@ client.on("messageCreate", async (message) => {
       let memberText = "No members";
 
       if (unique.length > 0) {
-        memberText = unique.map(u => `<@${u.id}>`).join(" ");
+        memberText = unique
+          .map(u => `<@${u.id}>`)
+          .join(" ");
       }
+
+      // =================================================
+      // SAFE LOG SEND
+      // =================================================
 
       if (logChannel) {
+
         await logChannel.send(
           `A Raid has been completed by ${memberText}`
-        );
+        ).catch(err => {
+          console.log("❌ LOG SEND FAILED:", err);
+        });
+
       } else {
-        console.log("❌ raid-logs not found");
+
+        console.log("❌ RAID LOGS CHANNEL NOT FOUND");
       }
 
-      console.log("🧨 Deleting raid channel...");
+      // =================================================
+      // DELETE RAID CHANNEL
+      // =================================================
+
+      console.log("🧨 DELETING RAID CHANNEL");
 
       await message.channel.send("Ending raid...");
 
       setTimeout(async () => {
+
         try {
+
           await message.channel.delete();
-          console.log("✅ Raid channel deleted");
+
+          console.log("✅ RAID CHANNEL DELETED");
+
         } catch (err) {
-          console.log("❌ Delete failed:", err);
+
+          console.log("❌ DELETE FAILED:", err);
         }
+
       }, 3000);
 
     } catch (err) {
+
       console.log("💥 ENDRAIDS ERROR:", err);
     }
 
     return;
   }
+
 });
 
 // ================= BUTTONS =================
@@ -176,6 +221,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const user = interaction.user;
   const guild = interaction.guild;
 
+  // =================================================
+  // START SURVEY BUTTON
+  // =================================================
+
   if (interaction.customId === "start_survey") {
 
     const row = new ActionRowBuilder().addComponents(
@@ -185,14 +234,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(ButtonStyle.Success)
     );
 
-    return interaction.reply({
+    await interaction.reply({
       content: "Here is your channel",
       components: [row],
       ephemeral: true
     });
+
+    return;
   }
 
+  // =================================================
+  // OPEN PRIVATE SURVEY CHANNEL
+  // =================================================
+
   if (interaction.customId === "open_survey_channel") {
+
+    const existing = guild.channels.cache.find(
+      c => c.name === `survey-${user.username}`
+    );
+
+    if (existing) {
+
+      await interaction.reply({
+        content: `You already have a survey channel: ${existing}`,
+        ephemeral: true
+      });
+
+      return;
+    }
 
     const surveyChannel = await guild.channels.create({
       name: `survey-${user.username}`,
@@ -202,6 +271,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           id: guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
+
         {
           id: user.id,
           allow: [
@@ -210,24 +280,32 @@ client.on(Events.InteractionCreate, async (interaction) => {
             PermissionsBitField.Flags.ReadMessageHistory
           ]
         },
+
         {
           id: client.user.id,
           allow: [
             PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory
           ]
         }
       ]
     });
 
     await interaction.reply({
-      content: `Your channel: ${surveyChannel}`,
+      content: `Your survey channel: ${surveyChannel}`,
       ephemeral: true
     });
 
-    const ask = async (q) => {
+    // =================================================
+    // QUESTIONS
+    // =================================================
 
-      await surveyChannel.send(`<@${user.id}> ${q}`);
+    const ask = async (question) => {
+
+      await surveyChannel.send(
+        `<@${user.id}> ${question}`
+      );
 
       const collected = await surveyChannel.awaitMessages({
         filter: m => m.author.id === user.id,
@@ -238,10 +316,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return collected.first()?.content || "Unknown";
     };
 
-    const hostRaw = await ask("1. Host?");
-    const packageRaw = await ask("2. Package?");
-    const raidRaw = await ask("3. Raid?");
-    const robloxRaw = await ask("4. Roblox username?");
+    const hostRaw =
+      await ask("1. Do you want to be the Host?");
+
+    const packageRaw =
+      await ask("2. Select your package");
+
+    const raidRaw =
+      await ask("3. Select a raid");
+
+    const robloxRaw =
+      await ask("4. What is your Roblox Username?");
+
+    // =================================================
+    // ADD TO QUEUE
+    // =================================================
 
     queue.push({
       userId: user.id,
@@ -251,53 +340,95 @@ client.on(Events.InteractionCreate, async (interaction) => {
       robloxRaw
     });
 
-    updateStats(guild);
+    console.log("📥 NEW QUEUE ENTRY:", queue[queue.length - 1]);
 
-    await surveyChannel.send("Survey complete.");
+    await updateStats(guild);
+
+    await surveyChannel.send(
+      "Survey completed. You are now in queue."
+    );
 
     setTimeout(() => {
       surveyChannel.delete().catch(() => {});
     }, 5000);
+
+    return;
   }
+
 });
 
-// ================= STATS =================
+// ================= UPDATE STATS =================
 
 async function updateStats(guild) {
+
+  console.log("🔥 updateStats CALLED");
 
   const channel = guild.channels.cache.find(
     c => c.name === QUEUE_CHANNEL_NAME
   );
 
-  if (!channel) return;
+  console.log("📌 queue channel:", channel?.name);
+
+  if (!channel) {
+    console.log("❌ QUEUE CHANNEL NOT FOUND");
+    return;
+  }
 
   let text = "QUEUE STATUS\n\n";
 
   if (queue.length === 0) {
-    text += "No players";
+
+    text += "No players in queue";
+
   } else {
-    for (const e of queue) {
-      text += `<@${e.userId}>\n`;
-      text += `Host: ${e.hostRaw}\n`;
-      text += `Amount of Raoi: ${e.packageRaw}\n`;
-      text += `Raid: ${e.raidRaw}\n`;
-      text += `Roblox: ${e.robloxRaw}\n\n`;
+
+    for (const entry of queue) {
+
+      text += `<@${entry.userId}> has submitted the survey\n`;
+      text += `Host: ${entry.hostRaw}\n`;
+      text += `Package: ${entry.packageRaw}\n`;
+      text += `Raid: ${entry.raidRaw}\n`;
+      text += `Roblox Username: ${entry.robloxRaw}\n\n`;
     }
   }
 
-  text += `Total: ${queue.length}`;
+  text += `Total in queue: ${queue.length}`;
 
-  if (!statsMessageId) {
-    const msg = await channel.send(text);
-    statsMessageId = msg.id;
-  } else {
-    const msg = await channel.messages.fetch(statsMessageId).catch(() => null);
-    if (!msg) {
-      const newMsg = await channel.send(text);
-      statsMessageId = newMsg.id;
+  try {
+
+    if (!statsMessageId) {
+
+      const msg = await channel.send(text);
+
+      statsMessageId = msg.id;
+
+      console.log("✅ STATS MESSAGE CREATED");
+
     } else {
-      await msg.edit(text);
+
+      const msg = await channel.messages
+        .fetch(statsMessageId)
+        .catch(() => null);
+
+      if (!msg) {
+
+        const newMsg = await channel.send(text);
+
+        statsMessageId = newMsg.id;
+
+        console.log("♻ STATS MESSAGE RECREATED");
+
+      } else {
+
+        await msg.edit(text);
+
+        console.log("✏ STATS UPDATED");
+      }
     }
+
+  } catch (err) {
+
+    console.log("💥 STATS ERROR:", err);
   }
 }
 
