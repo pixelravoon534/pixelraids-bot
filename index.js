@@ -2,7 +2,11 @@ const {
   Client,
   GatewayIntentBits,
   PermissionsBitField,
-  ChannelType
+  ChannelType,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Events
 } = require("discord.js");
 
 const client = new Client({
@@ -26,59 +30,123 @@ client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-// ================= SURVEY =================
-// SIMPLE TEXT SURVEY SYSTEM
-
-async function ask(channel, user, text) {
-  await channel.send(text);
-
-  try {
-    const collected = await channel.awaitMessages({
-      filter: m => m.author.id === user.id,
-      max: 1,
-      time: 180000
-    });
-
-    return collected.first().content;
-  } catch {
-    channel.send("Survey timed out.");
-    return null;
-  }
-}
-
-// ================= SURVEY START =================
+// ================= PANEL COMMAND =================
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  if (message.content === "!survey") {
+  if (message.content === "!panel") {
 
-    const ch = message.channel;
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("start_survey")
+        .setLabel("Start Survey")
+        .setStyle(ButtonStyle.Primary)
+    );
 
-    const q1 = await ask(ch, message.author,
-`1. What is your username?`);
+    message.channel.send({
+      content: "Raid System Panel",
+      components: [row]
+    });
+  }
 
-    if (!q1) return;
+  // BEGIN RAIDS
+  if (message.content === "!beginraids") {
+    if (!groups[0]) return message.reply("No groups available.");
 
-    const q2 = await ask(ch, message.author,
-`2. Are you the host? (yes/no)`);
+    activeRaid = groups.shift();
 
-    if (!q2) return;
+    const raidChannel = await message.guild.channels.create({
+      name: `raid-${Date.now()}`,
+      type: ChannelType.GuildText,
+      permissionOverwrites: [
+        {
+          id: message.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: client.user.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory
+          ]
+        }
+      ]
+    });
 
-    const q3 = await ask(ch, message.author,
-`3. What raid do you want?`);
+    let text = "RAID STARTED\n\n";
 
-    if (!q3) return;
+    activeRaid.forEach(p => {
+      text += `${p.username} | ${p.raid} | ${p.package} | ${p.isHost ? "Host" : "Member"}\n`;
+    });
 
-    const q4 = await ask(ch, message.author,
-`4. Package (1 / 2 / 3 / unlimited)`);
+    raidChannel.send(text);
 
-    if (!q4) return;
+    updateStats(message.guild);
+  }
 
-    const isHost = q2.toLowerCase() === "yes";
+  // RAID FINISH
+  if (message.content === "!raidfinish") {
+
+    const logChannel = message.guild.channels.cache.find(c => c.name === "raid-logs");
+
+    const time = new Date().toISOString();
+
+    if (activeRaid && logChannel) {
+
+      let log = "RAID LOG\n\n";
+      log += `TIME (UTC): ${time}\n\n`;
+
+      activeRaid.forEach(p => {
+        log += `${p.username} | ${p.raid} | ${p.package} | ${p.isHost ? "Host" : "Member"}\n`;
+      });
+
+      logChannel.send(log);
+    }
+
+    activeRaid = null;
+    message.reply("Raid finished.");
+  }
+});
+
+// ================= BUTTON HANDLER =================
+
+client.on(Events.InteractionCreate, async (interaction) => {
+
+  if (!interaction.isButton()) return;
+
+  if (interaction.customId === "start_survey") {
+
+    await interaction.reply({
+      content: "Survey started in this channel.",
+      ephemeral: true
+    });
+
+    const user = interaction.user;
+    const channel = interaction.channel;
+
+    const ask = async (text) => {
+      await channel.send(`1. ${text}`);
+
+      const collected = await channel.awaitMessages({
+        filter: m => m.author.id === user.id,
+        max: 1,
+        time: 180000
+      });
+
+      return collected.first()?.content;
+    };
+
+    const q1 = await ask("What is your username?");
+    const q2 = await ask("Are you the host? (yes/no)");
+    const q3 = await ask("What raid do you want?");
+    const q4 = await ask("Package (1 / 2 / 3 / unlimited)");
+
+    const isHost = q2?.toLowerCase() === "yes";
 
     queue.push({
-      id: message.author.id,
+      id: user.id,
       username: q1,
       isHost,
       raid: q3,
@@ -86,13 +154,13 @@ client.on("messageCreate", async (message) => {
     });
 
     buildGroups();
-    updateStats(message.guild);
+    updateStats(interaction.guild);
 
-    ch.send("Added to queue.");
+    channel.send(`${user.username} added to queue.`);
   }
 });
 
-// ================= GROUP BUILDER =================
+// ================= GROUP SYSTEM =================
 
 function buildGroups() {
 
@@ -127,7 +195,7 @@ async function updateStats(guild) {
   const channel = guild.channels.cache.find(c => c.name === "queue-stats");
   if (!channel) return;
 
-  let text = "PIXELRAIDS STATS\n\n";
+  let text = "RAID STATS\n\n";
 
   for (let i = 0; i < 3; i++) {
 
@@ -148,7 +216,6 @@ async function updateStats(guild) {
     if (members.length === 0) {
       text += "Members: none\n\n";
     } else {
-      text += "Members:\n";
       members.forEach(m => {
         text += `- ${m.username}\n`;
       });
@@ -166,81 +233,6 @@ async function updateStats(guild) {
     if (msg) msg.edit(text);
   }
 }
-
-// ================= BEGIN RAIDS =================
-
-client.on("messageCreate", async (message) => {
-
-  if (message.author.bot) return;
-  if (message.content !== "!beginraids") return;
-  if (message.channel.name !== "admin-control") return;
-
-  if (!groups[0]) {
-    return message.channel.send("No groups available.");
-  }
-
-  activeRaid = groups.shift();
-
-  const guild = message.guild;
-
-  const raidChannel = await guild.channels.create({
-    name: `raid-${Date.now()}`,
-    type: ChannelType.GuildText,
-    permissionOverwrites: [
-      {
-        id: guild.id,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      {
-        id: client.user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory
-        ]
-      }
-    ]
-  });
-
-  let msg = "PIXELRAIDS RAID STARTED\n\n";
-
-  activeRaid.forEach(p => {
-    msg += `${p.username} | ${p.raid} | ${p.package} | ${p.isHost ? "Host" : "Member"}\n`;
-  });
-
-  raidChannel.send(msg);
-
-  updateStats(guild);
-});
-
-// ================= RAID FINISH =================
-
-client.on("messageCreate", async (message) => {
-
-  if (message.author.bot) return;
-  if (message.content !== "!raidfinish") return;
-  if (message.channel.name !== "admin-control") return;
-
-  const logChannel = message.guild.channels.cache.find(c => c.name === "raid-logs");
-
-  const time = new Date().toISOString();
-
-  if (activeRaid && logChannel) {
-
-    let log = "PIXELRAIDS RAID LOG\n\n";
-    log += `TIME (UTC): ${time}\n\n`;
-
-    activeRaid.forEach(p => {
-      log += `${p.username} | ${p.raid} | ${p.package} | ${p.isHost ? "Host" : "Member"}\n`;
-    });
-
-    logChannel.send(log);
-  }
-
-  activeRaid = null;
-
-  message.channel.send("Raid finished.");
-});
 
 // ================= LOGIN =================
 
