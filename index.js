@@ -266,4 +266,4 @@ client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}`);
 });
 
-client.login("MTUwMTg2NzU1MDYxMzU3MzcyMg.G8b3_f.-dn_Ifikzq35RAxhsZqLXW0HgensRSwhTPJ034");
+client.login(process.env.TOKEN);
