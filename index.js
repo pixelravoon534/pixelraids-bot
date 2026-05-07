@@ -24,26 +24,21 @@ let groups = [];
 let activeRaid = null;
 let statsMessageId = null;
 
-// ================= START LOG =================
-
-console.log("PIXELRAIDS BOT STARTING...");
+// temporary survey storage
+let surveySessions = new Map();
 
 // ================= READY =================
 
 client.once("ready", () => {
-  console.log(`BOT ONLINE: ${client.user.tag}`);
+  console.log(`ONLINE: ${client.user.tag}`);
 });
 
 // ================= PANEL =================
 
 client.on("messageCreate", async (message) => {
-
   if (message.author.bot) return;
 
-  console.log("[MSG]", message.content);
-
   if (message.content === "!panel") {
-    console.log("[DEBUG] Panel command triggered");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -53,20 +48,14 @@ client.on("messageCreate", async (message) => {
     );
 
     message.channel.send({
-      content: "PIXELRAIDS PANEL (DEBUG ACTIVE)",
+      content: "RAID PANEL",
       components: [row]
     });
   }
 
-  // RAID START
   if (message.content === "!beginraids") {
 
-    console.log("[DEBUG] beginraids triggered");
-
-    if (!groups[0]) {
-      console.log("[DEBUG] No groups available");
-      return message.reply("No groups available.");
-    }
+    if (!groups[0]) return message.reply("No groups available.");
 
     activeRaid = groups.shift();
 
@@ -82,8 +71,7 @@ client.on("messageCreate", async (message) => {
           id: client.user.id,
           allow: [
             PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory
+            PermissionsBitField.Flags.SendMessages
           ]
         }
       ]
@@ -100,13 +88,9 @@ client.on("messageCreate", async (message) => {
     updateStats(message.guild);
   }
 
-  // RAID FINISH
   if (message.content === "!raidfinish") {
 
-    console.log("[DEBUG] raidfinish triggered");
-
     const logChannel = message.guild.channels.cache.find(c => c.name === "raid-logs");
-
     const time = new Date().toISOString();
 
     if (activeRaid && logChannel) {
@@ -126,58 +110,105 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ================= BUTTON HANDLER =================
+// ================= BUTTON SURVEY =================
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
-  console.log("[INTERACTION]", interaction.customId);
-
   if (!interaction.isButton()) return;
 
+  // START SURVEY
   if (interaction.customId === "start_survey") {
 
-    console.log("[DEBUG] Button clicked");
+    const userId = interaction.user.id;
+
+    surveySessions.set(userId, { step: 1 });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("host_yes")
+        .setLabel("Host")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("host_no")
+        .setLabel("Member")
+        .setStyle(ButtonStyle.Secondary)
+    );
 
     await interaction.reply({
-      content: "Survey started (DEBUG MODE)",
+      content: "1. Are you the host?",
+      components: [row],
       ephemeral: true
     });
+  }
 
-    const user = interaction.user;
-    const channel = interaction.channel;
+  // HOST CHOICE
+  if (interaction.customId === "host_yes" || interaction.customId === "host_no") {
 
-    const ask = async (text) => {
+    const session = surveySessions.get(interaction.user.id);
+    if (!session) return;
 
-      await channel.send(`1. ${text}`);
+    session.isHost = interaction.customId === "host_yes";
 
-      const collected = await channel.awaitMessages({
-        filter: m => m.author.id === user.id,
-        max: 1,
-        time: 180000
-      });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("pkg_1").setLabel("1").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("pkg_2").setLabel("2").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("pkg_3").setLabel("3").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("pkg_u").setLabel("Unlimited").setStyle(ButtonStyle.Danger)
+    );
 
-      return collected.first()?.content;
+    await interaction.update({
+      content: "2. Select package:",
+      components: [row]
+    });
+  }
+
+  // PACKAGE CHOICE
+  if (interaction.customId.startsWith("pkg_")) {
+
+    const session = surveySessions.get(interaction.user.id);
+    if (!session) return;
+
+    const map = {
+      pkg_1: "1",
+      pkg_2: "2",
+      pkg_3: "3",
+      pkg_u: "unlimited"
     };
 
-    const q1 = await ask("What is your username?");
-    const q2 = await ask("Are you the host? (yes/no)");
-    const q3 = await ask("What raid do you want?");
-    const q4 = await ask("Package (1 / 2 / 3 / unlimited)");
+    session.package = map[interaction.customId];
 
-    const isHost = q2?.toLowerCase() === "yes";
+    const channel = interaction.channel;
+
+    await interaction.update({
+      content: "3. Send your username in chat",
+      components: []
+    });
+
+    const collected = await channel.awaitMessages({
+      filter: m => m.author.id === interaction.user.id,
+      max: 1,
+      time: 180000
+    });
+
+    const username = collected.first()?.content;
+
+    session.username = username;
+    session.raid = "default";
 
     queue.push({
-      id: user.id,
-      username: q1,
-      isHost,
-      raid: q3,
-      package: q4
+      id: interaction.user.id,
+      username,
+      isHost: session.isHost,
+      raid: session.raid,
+      package: session.package
     });
+
+    surveySessions.delete(interaction.user.id);
 
     buildGroups();
     updateStats(interaction.guild);
 
-    channel.send(`${user.username} added to queue.`);
+    channel.send(`${username} added to queue.`);
   }
 });
 
@@ -185,17 +216,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 function buildGroups() {
 
-  console.log("[DEBUG] Building groups...");
-
   groups = [];
 
   let hosts = queue.filter(p => p.isHost);
   let members = queue.filter(p => !p.isHost);
-
-  console.log("[DEBUG] Hosts:", hosts.length);
-  console.log("[DEBUG] Members:", members.length);
-
-  if (hosts.length === 0) return;
 
   while (hosts.length > 0) {
 
@@ -239,14 +263,11 @@ async function updateStats(guild) {
 
     text += `Host: ${host?.username || "none"}\n`;
 
-    if (members.length === 0) {
-      text += "Members: none\n\n";
-    } else {
-      members.forEach(m => {
-        text += `- ${m.username}\n`;
-      });
-      text += "\n";
-    }
+    members.forEach(m => {
+      text += `- ${m.username}\n`;
+    });
+
+    text += "\n";
   }
 
   text += `Waiting: ${queue.length}`;
