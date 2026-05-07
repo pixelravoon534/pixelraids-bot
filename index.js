@@ -43,7 +43,7 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   // =================================================
-  // !SURVEY (ANYONE CAN USE)
+  // !SURVEY
   // =================================================
 
   if (message.content.trim() === "!survey") {
@@ -55,14 +55,16 @@ client.on("messageCreate", async (message) => {
         .setStyle(ButtonStyle.Primary)
     );
 
-    return message.channel.send({
+    await message.channel.send({
       content: "Click below to start your survey",
       components: [row]
     });
+
+    return;
   }
 
   // =================================================
-  // ONLY YOU CAN USE BELOW COMMANDS
+  // OWNER ONLY COMMANDS
   // =================================================
 
   if (message.author.id !== OWNER_ID) return;
@@ -86,7 +88,6 @@ client.on("messageCreate", async (message) => {
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
 
-        // YOU
         {
           id: OWNER_ID,
           allow: [
@@ -96,7 +97,6 @@ client.on("messageCreate", async (message) => {
           ]
         },
 
-        // BOT
         {
           id: client.user.id,
           allow: [
@@ -110,7 +110,9 @@ client.on("messageCreate", async (message) => {
 
     await raidChannel.send("Raid channel created.");
 
-    return message.reply(`Raid created: ${raidChannel}`);
+    await message.reply(`Raid created: ${raidChannel}`);
+
+    return;
   }
 
   // =================================================
@@ -129,7 +131,9 @@ client.on("messageCreate", async (message) => {
 
     if (logChannel) {
 
-      const fetched = await message.channel.messages.fetch({ limit: 100 });
+      const fetched = await message.channel.messages.fetch({
+        limit: 100
+      });
 
       const mentions = fetched
         .map(m => m.mentions.users)
@@ -164,6 +168,7 @@ client.on("messageCreate", async (message) => {
 
     return;
   }
+
 });
 
 // ================= BUTTONS =================
@@ -188,15 +193,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(ButtonStyle.Success)
     );
 
-    return interaction.reply({
+    await interaction.reply({
       content: "Here is your channel",
       components: [row],
       ephemeral: true
     });
+
+    return;
   }
 
   // =================================================
-  // CREATE PRIVATE SURVEY CHANNEL
+  // OPEN SURVEY CHANNEL
   // =================================================
 
   if (interaction.customId === "open_survey_channel") {
@@ -206,10 +213,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     );
 
     if (existing) {
-      return interaction.reply({
+
+      await interaction.reply({
         content: `You already have a survey channel: ${existing}`,
         ephemeral: true
       });
+
+      return;
     }
 
     const surveyChannel = await guild.channels.create({
@@ -255,12 +265,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         `<@${user.id}> ${text}`
       );
 
-      const collected =
-        await surveyChannel.awaitMessages({
-          filter: m => m.author.id === user.id,
-          max: 1,
-          time: 180000
-        });
+      const collected = await surveyChannel.awaitMessages({
+        filter: m => m.author.id === user.id,
+        max: 1,
+        time: 180000
+      });
 
       return collected.first()?.content || "Unknown";
     };
@@ -291,7 +300,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     console.log("NEW QUEUE ENTRY:", queue[queue.length - 1]);
 
-    updateStats(guild);
+    await updateStats(guild);
 
     await surveyChannel.send(
       "Survey completed. You are now in queue."
@@ -300,7 +309,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     setTimeout(() => {
       surveyChannel.delete().catch(() => {});
     }, 5000);
+
+    return;
   }
+
 });
 
 // ================= UPDATE STATS =================
@@ -352,15 +364,13 @@ async function updateStats(guild) {
 
     } else {
 
-      const msg =
-        await channel.messages
-          .fetch(statsMessageId)
-          .catch(() => null);
+      const msg = await channel.messages
+        .fetch(statsMessageId)
+        .catch(() => null);
 
       if (!msg) {
 
-        const newMsg =
-          await channel.send(text);
+        const newMsg = await channel.send(text);
 
         statsMessageId = newMsg.id;
 
@@ -374,214 +384,6 @@ async function updateStats(guild) {
 
     console.log("STATS ERROR:", err);
   }
-}
-
-// ================= LOGIN =================
-
-client.login(process.env.TOKEN);  // START SURVEY BUTTON
-  // =================================================
-
-  if (interaction.customId === "start_survey") {
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("open_survey_channel")
-        .setLabel("Open Survey Channel")
-        .setStyle(ButtonStyle.Success)
-    );
-
-    return interaction.reply({
-      content: "Here is your channel",
-      components: [row],
-      ephemeral: true
-    });
-  }
-
-  // =================================================
-  // CREATE PRIVATE SURVEY CHANNEL
-  // =================================================
-
-  if (interaction.customId === "open_survey_channel") {
-
-    const existing = guild.channels.cache.find(
-      c => c.name === `survey-${user.username}`
-    );
-
-    if (existing) {
-      return interaction.reply({
-        content: `You already have a survey channel: ${existing}`,
-        ephemeral: true
-      });
-    }
-
-    const surveyChannel = await guild.channels.create({
-      name: `survey-${user.username}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-
-        {
-          id: user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory
-          ]
-        },
-
-        {
-          id: client.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        }
-      ]
-    });
-
-    await interaction.reply({
-      content: `Your survey channel: ${surveyChannel}`,
-      ephemeral: true
-    });
-
-    // =================================================
-    // QUESTIONS
-    // =================================================
-
-    const ask = async (text) => {
-
-      await surveyChannel.send(
-        `<@${user.id}> ${text}`
-      );
-
-      const collected =
-        await surveyChannel.awaitMessages({
-          filter: m => m.author.id === user.id,
-          max: 1,
-          time: 180000
-        });
-
-      return collected.first()?.content || "Unknown";
-    };
-
-    const hostRaw =
-      await ask("1. Will you Host the Raid?");
-
-    const packageRaw =
-      await ask("2. How many Raids? 1 / 2 / 3");
-
-    const raidRaw =
-      await ask("3. What raid do you need");
-
-    const robloxRaw =
-      await ask("4. What is your Roblox Username?");
-
-    // =================================================
-    // ADD TO QUEUE
-    // =================================================
-
-    queue.push({
-      userId: user.id,
-      hostRaw,
-      packageRaw,
-      raidRaw,
-      robloxRaw
-    });
-
-    console.log("NEW QUEUE ENTRY:", queue[queue.length - 1]);
-
-    updateStats(guild);
-
-    await surveyChannel.send(
-      "Survey completed. You are now in queue."
-    );
-
-    setTimeout(() => {
-      surveyChannel.delete().catch(() => {});
-    }, 5000);
-  }
-});
-
-// ================= UPDATE STATS =================
-
-async function updateStats(guild) {
-
-  console.log("updateStats CALLED");
-
-  const channel = guild.channels.cache.find(
-    c => c.name === QUEUE_CHANNEL_NAME
-  );
-
-  console.log("queue channel:", channel?.name);
-
-  if (!channel) {
-    console.log("QUEUE CHANNEL NOT FOUND");
-    return;
-  }
-
-  let text = "QUEUE STATUS\n\n";
-
-  if (queue.length === 0) {
-
-    text += "No players in queue";
-
-  } else {
-
-    for (const entry of queue) {
-
-      text += `<@${entry.userId}> has submitted the survey\n`;
-      text += `Host: ${entry.hostRaw}\n`;
-      text += `Package: ${entry.packageRaw}\n`;
-      text += `Raid: ${entry.raidRaw}\n`;
-      text += `Roblox Username: ${entry.robloxRaw}\n\n`;
-    }
-  }
-
-  text += `Total in queue: ${queue.length}`;
-
-  try {
-
-    if (!statsMessageId) {
-
-      const msg = await channel.send(text);
-
-      statsMessageId = msg.id;
-
-      console.log("STATS MESSAGE CREATED");
-
-    } else {
-
-      const msg =
-        await channel.messages
-          .fetch(statsMessageId)
-          .catch(() => null);
-
-      if (!msg) {
-
-        const newMsg =
-          await channel.send(text);
-
-        statsMessageId = newMsg.id;
-
-      } else {
-
-        await msg.edit(text);
-      }
-    }
-
-  } catch (err) {
-
-    console.log("STATS ERROR:", err);
-  }
-}
-
-// ================= REFRESH STATS =================
-
-function continueQueueStats(guild) {
-  updateStats(guild);
 }
 
 // ================= LOGIN =================
