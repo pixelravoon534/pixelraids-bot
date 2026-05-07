@@ -24,18 +24,26 @@ let groups = [];
 let activeRaid = null;
 let statsMessageId = null;
 
+// ================= START LOG =================
+
+console.log("PIXELRAIDS BOT STARTING...");
+
 // ================= READY =================
 
 client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`BOT ONLINE: ${client.user.tag}`);
 });
 
-// ================= PANEL COMMAND =================
+// ================= PANEL =================
 
 client.on("messageCreate", async (message) => {
+
   if (message.author.bot) return;
 
+  console.log("[MSG]", message.content);
+
   if (message.content === "!panel") {
+    console.log("[DEBUG] Panel command triggered");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -45,14 +53,20 @@ client.on("messageCreate", async (message) => {
     );
 
     message.channel.send({
-      content: "Raid System Panel",
+      content: "PIXELRAIDS PANEL (DEBUG ACTIVE)",
       components: [row]
     });
   }
 
-  // BEGIN RAIDS
+  // RAID START
   if (message.content === "!beginraids") {
-    if (!groups[0]) return message.reply("No groups available.");
+
+    console.log("[DEBUG] beginraids triggered");
+
+    if (!groups[0]) {
+      console.log("[DEBUG] No groups available");
+      return message.reply("No groups available.");
+    }
 
     activeRaid = groups.shift();
 
@@ -89,6 +103,8 @@ client.on("messageCreate", async (message) => {
   // RAID FINISH
   if (message.content === "!raidfinish") {
 
+    console.log("[DEBUG] raidfinish triggered");
+
     const logChannel = message.guild.channels.cache.find(c => c.name === "raid-logs");
 
     const time = new Date().toISOString();
@@ -96,7 +112,7 @@ client.on("messageCreate", async (message) => {
     if (activeRaid && logChannel) {
 
       let log = "RAID LOG\n\n";
-      log += `TIME (UTC): ${time}\n\n`;
+      log += `UTC TIME: ${time}\n\n`;
 
       activeRaid.forEach(p => {
         log += `${p.username} | ${p.raid} | ${p.package} | ${p.isHost ? "Host" : "Member"}\n`;
@@ -114,12 +130,16 @@ client.on("messageCreate", async (message) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
+  console.log("[INTERACTION]", interaction.customId);
+
   if (!interaction.isButton()) return;
 
   if (interaction.customId === "start_survey") {
 
+    console.log("[DEBUG] Button clicked");
+
     await interaction.reply({
-      content: "Survey started in this channel.",
+      content: "Survey started (DEBUG MODE)",
       ephemeral: true
     });
 
@@ -127,6 +147,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const channel = interaction.channel;
 
     const ask = async (text) => {
+
       await channel.send(`1. ${text}`);
 
       const collected = await channel.awaitMessages({
@@ -164,10 +185,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 function buildGroups() {
 
+  console.log("[DEBUG] Building groups...");
+
   groups = [];
 
   let hosts = queue.filter(p => p.isHost);
   let members = queue.filter(p => !p.isHost);
+
+  console.log("[DEBUG] Hosts:", hosts.length);
+  console.log("[DEBUG] Members:", members.length);
 
   if (hosts.length === 0) return;
 
