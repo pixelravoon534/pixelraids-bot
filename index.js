@@ -159,7 +159,7 @@ async function updateStats(guild) {
 
   console.log("🔥 updateStats CALLED");
 
-  const channel = guild.channels.cache.find(c => c.name === "queue-stats");
+  const channel = guild.channels.cache.find(c => c.name === "queue-status");
 
   console.log("📌 queue-stats channel:", channel?.name);
 
