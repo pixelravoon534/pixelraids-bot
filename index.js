@@ -316,10 +316,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ask("1. Do you want to be the Host?");
 
     const packageRaw =
-      await ask("2. Select your package");
+      await ask("2. How many Raids do you need?");
 
     const raidRaw =
-      await ask("3. Select a raid");
+      await ask("3. What type raid of raid?");
 
     const robloxRaw =
       await ask("4. What is your Roblox Username?");
@@ -341,7 +341,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await updateStats(guild);
 
     await surveyChannel.send(
-      "Survey completed. You are now in queue."
+      "Survey completed. You are now in queue. If you typed wrong, you will not be matchmaking, if so, please start a new Survey"
     );
 
     setTimeout(() => {
@@ -382,7 +382,7 @@ async function updateStats(guild) {
 
       text += `<@${entry.userId}> has submitted the survey\n`;
       text += `Host: ${entry.hostRaw}\n`;
-      text += `Package: ${entry.packageRaw}\n`;
+      text += `Amount of Raids: ${entry.packageRaw}\n`;
       text += `Raid: ${entry.raidRaw}\n`;
       text += `Roblox Username: ${entry.robloxRaw}\n\n`;
     }
