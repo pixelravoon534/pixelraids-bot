@@ -28,7 +28,7 @@ client.once("ready", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
 
-// ================= !SURVEY (BUTTON IN ORIGINAL CHAT) =================
+// ================= !SURVEY =================
 
 client.on("messageCreate", async (message) => {
 
@@ -38,120 +38,136 @@ client.on("messageCreate", async (message) => {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("start_survey")
+        .setCustomId("survey_start")
         .setLabel("Start Survey")
         .setStyle(ButtonStyle.Primary)
     );
 
-    await message.channel.send({
-      content: "Click to start your raid survey",
+    message.channel.send({
+      content: "Click to start your survey",
       components: [row]
     });
   }
 });
 
-// ================= BUTTON -> CREATE PRIVATE CHANNEL =================
+// ================= STEP 1 BUTTON =================
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!interaction.isButton()) return;
 
-  if (interaction.customId !== "start_survey") return;
-
   const user = interaction.user;
   const guild = interaction.guild;
 
-  await interaction.reply({
-    content: "Creating your private survey channel...",
-    ephemeral: true
-  });
+  // ================= STEP 1: CLICK START =================
 
-  // ================= CREATE PRIVATE CHANNEL =================
+  if (interaction.customId === "survey_start") {
 
-  const channel = await guild.channels.create({
-    name: `survey-${user.username}`,
-    type: ChannelType.GuildText,
-    permissionOverwrites: [
-      {
-        id: guild.id,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      {
-        id: user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory
-        ]
-      },
-      {
-        id: client.user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ManageChannels
-        ]
-      }
-    ]
-  });
+    const openRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("open_channel")
+        .setLabel("Open Your Survey Channel")
+        .setStyle(ButtonStyle.Success)
+    );
 
-  // ================= SURVEY =================
+    await interaction.reply({
+      content: "Here is your channel",
+      components: [openRow],
+      ephemeral: true
+    });
+  }
 
-  const ask = async (text) => {
-    await channel.send(text);
+  // ================= STEP 2: CREATE CHANNEL =================
 
-    const collected = await channel.awaitMessages({
-      filter: m => m.author.id === user.id,
-      max: 1,
-      time: 180000
+  if (interaction.customId === "open_channel") {
+
+    const user = interaction.user;
+
+    const channel = await guild.channels.create({
+      name: `survey-${user.username}`,
+      type: ChannelType.GuildText,
+      permissionOverwrites: [
+        {
+          id: guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: user.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory
+          ]
+        },
+        {
+          id: client.user.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
+        }
+      ]
     });
 
-    return collected.first()?.content || "Unknown";
-  };
+    await interaction.reply({
+      content: `Your channel: ${channel}`,
+      ephemeral: true
+    });
 
-  const hostRaw = await ask("1. Do you want to be the Host? (Yes / No / YASSS etc)");
-  const packageRaw = await ask("2. Select your package (1 / 2 / 3 / Unlimited)");
-  const raidRaw = await ask("3. Select a raid");
-  const robloxRaw = await ask("4. What is your Roblox Username?");
+    // ================= SURVEY =================
 
-  // ================= QUEUE =================
+    const ask = async (text) => {
+      await channel.send(text);
 
-  queue.push({
-    userId: user.id,
-    hostRaw,
-    packageRaw,
-    raidRaw,
-    robloxRaw
-  });
+      const collected = await channel.awaitMessages({
+        filter: m => m.author.id === user.id,
+        max: 1,
+        time: 180000
+      });
 
-  updateStats(guild);
+      return collected.first()?.content || "Unknown";
+    };
 
-  await channel.send("Survey complete. You are added to the queue.");
+    const hostRaw = await ask("1. Do you want to be the Host?");
+    const packageRaw = await ask("2. Select your package (1 / 2 / 3 / Unlimited)");
+    const raidRaw = await ask("3. Select a raid");
+    const robloxRaw = await ask("4. Roblox Username");
 
-  setTimeout(() => {
-    channel.delete().catch(() => {});
-  }, 5000);
+    // ================= QUEUE =================
+
+    queue.push({
+      userId: user.id,
+      hostRaw,
+      packageRaw,
+      raidRaw,
+      robloxRaw
+    });
+
+    updateStats(guild);
+
+    channel.send("Survey complete. You are in queue.");
+
+    setTimeout(() => {
+      channel.delete().catch(() => {});
+    }, 5000);
+  }
 });
 
-// ================= STATS (FIXED + BULLETPROOF) =================
+// ================= STATS (FIXED RELIABLE VERSION) =================
 
 async function updateStats(guild) {
 
   const channel = guild.channels.cache.find(c => c.name === "queue-stats");
 
   if (!channel) {
-    console.log("[STATS ERROR] queue-stats channel NOT FOUND");
+    console.log("[STATS ERROR] queue-stats not found");
     return;
   }
 
-  const botMember = guild.members.me;
+  const bot = guild.members.me;
 
-  if (!channel.permissionsFor(botMember)?.has([
-    "ViewChannel",
-    "SendMessages",
-    "ReadMessageHistory"
-  ])) {
-    console.log("[STATS ERROR] missing permissions in queue-stats");
+  if (!channel.permissionsFor(bot)?.has(["ViewChannel", "SendMessages"])) {
+    console.log("[STATS ERROR] missing permissions");
     return;
   }
 
@@ -161,13 +177,12 @@ async function updateStats(guild) {
     text += "No players in queue\n";
   } else {
 
-    for (const entry of queue) {
-
-      text += `<@${entry.userId}> has submitted the survey\n`;
-      text += `Host: ${entry.hostRaw}\n`;
-      text += `Package: ${entry.packageRaw}\n`;
-      text += `Raid: ${entry.raidRaw}\n`;
-      text += `Roblox Username: ${entry.robloxRaw}\n\n`;
+    for (const e of queue) {
+      text += `<@${e.userId}> has submitted the survey\n`;
+      text += `Host: ${e.hostRaw}\n`;
+      text += `Package: ${e.packageRaw}\n`;
+      text += `Raid: ${e.raidRaw}\n`;
+      text += `Roblox Username: ${e.robloxRaw}\n\n`;
     }
   }
 
