@@ -1,8 +1,6 @@
 const {
   Client,
   GatewayIntentBits,
-  PermissionsBitField,
-  ChannelType,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -20,7 +18,6 @@ const client = new Client({
 // ================= STATE =================
 
 let queue = [];
-let groups = [];
 let statsMessageId = null;
 
 // ================= READY =================
@@ -29,12 +26,12 @@ client.once("ready", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
 
-// ================= PANEL =================
+// ================= !SURVEY COMMAND =================
 
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  if (message.content === "!panel") {
+  if (message.content === "!survey") {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -44,13 +41,13 @@ client.on("messageCreate", async (message) => {
     );
 
     message.channel.send({
-      content: "RAID PANEL",
+      content: "Click to start your raid survey",
       components: [row]
     });
   }
 });
 
-// ================= BUTTON =================
+// ================= BUTTON FLOW =================
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
@@ -58,106 +55,78 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.customId === "start_survey") {
 
-    const guild = interaction.guild;
     const user = interaction.user;
-
-    // CREATE PRIVATE CHANNEL
-    const channel = await guild.channels.create({
-      name: `survey-${user.username}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory
-          ]
-        },
-        {
-          id: client.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        }
-      ]
-    });
+    const channel = interaction.channel;
 
     await interaction.reply({
-      content: `Survey created: ${channel}`,
+      content: "Survey started in this channel",
       ephemeral: true
     });
 
-    // SURVEY FLOW
-    const ask = async (text) => {
-      await channel.send(text);
+    // 1. HOST
+    const hostRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("host_yes").setLabel("Yes").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("host_no").setLabel("No").setStyle(ButtonStyle.Secondary)
+    );
 
-      const collected = await channel.awaitMessages({
-        filter: m => m.author.id === user.id,
-        max: 1,
-        time: 180000
+    await channel.send({ content: "1. Are you the host?", components: [hostRow] });
+
+    const host = await new Promise(resolve => {
+      client.once("interactionCreate", i => {
+        if (i.user.id === user.id) {
+          if (i.customId === "host_yes") resolve(true);
+          if (i.customId === "host_no") resolve(false);
+        }
       });
-
-      return collected.first()?.content;
-    };
-
-    const username = await ask("1. What is your username?");
-    const hostAns = await ask("2. Are you the host? (yes/no)");
-    const raid = await ask("3. What raid do you want?");
-    const pack = await ask("4. Package (1 / 2 / 3 / unlimited)");
-
-    const isHost = hostAns?.toLowerCase().includes("y");
-
-    queue.push({
-      id: user.id,
-      username,
-      isHost,
-      raid,
-      package: pack
     });
 
-    buildGroups();
-    updateStats(guild);
+    // 2. PACKAGE
+    const pkgRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("pkg_1").setLabel("1").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("pkg_2").setLabel("2").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("pkg_3").setLabel("3").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("pkg_u").setLabel("Unlimited").setStyle(ButtonStyle.Danger)
+    );
 
-    await channel.send("Survey complete. You have been added to the queue.");
+    await channel.send({ content: "2. Select package", components: [pkgRow] });
 
-    // DELETE AFTER 5 SECONDS
-    setTimeout(() => {
-      channel.delete().catch(() => {});
-    }, 5000);
+    const packageChoice = await new Promise(resolve => {
+      client.once("interactionCreate", i => {
+        if (i.user.id === user.id) {
+          if (i.customId === "pkg_1") resolve("1");
+          if (i.customId === "pkg_2") resolve("2");
+          if (i.customId === "pkg_3") resolve("3");
+          if (i.customId === "pkg_u") resolve("Unlimited");
+        }
+      });
+    });
+
+    // 3. RAID TYPE (text input simple)
+    await channel.send("3. Type your raid (example: Ice, Fire, etc)");
+
+    const collected = await channel.awaitMessages({
+      filter: m => m.author.id === user.id,
+      max: 1,
+      time: 180000
+    });
+
+    const raid = collected.first()?.content || "Unknown";
+
+    // ================= QUEUE ENTRY =================
+
+    queue.push({
+      userId: user.id,
+      username: user.username,
+      host,
+      package: packageChoice,
+      raid
+    });
+
+    updateStats(interaction.guild);
+
+    channel.send("Survey complete. You are added to queue.");
   }
 });
-
-// ================= GROUP SYSTEM =================
-
-function buildGroups() {
-
-  groups = [];
-
-  let hosts = queue.filter(p => p.isHost);
-  let members = queue.filter(p => !p.isHost);
-
-  while (hosts.length > 0) {
-
-    let host = hosts.shift();
-    let group = [host];
-
-    for (let i = 0; i < members.length && group.length < 3; i++) {
-      group.push(members[i]);
-      members.splice(i, 1);
-      i--;
-    }
-
-    groups.push(group);
-  }
-
-  queue = members;
-}
 
 // ================= STATS =================
 
@@ -166,32 +135,17 @@ async function updateStats(guild) {
   const channel = guild.channels.cache.find(c => c.name === "queue-stats");
   if (!channel) return;
 
-  let text = "RAID STATS\n\n";
+  let text = "QUEUE STATS\n\n";
 
-  for (let i = 0; i < 3; i++) {
+  for (const entry of queue) {
 
-    const g = groups[i];
-
-    text += `GROUP ${i + 1}:\n`;
-
-    if (!g) {
-      text += "No group\n\n";
-      continue;
-    }
-
-    const host = g.find(p => p.isHost);
-    const members = g.filter(p => !p.isHost);
-
-    text += `Host: ${host?.username || "none"}\n`;
-
-    members.forEach(m => {
-      text += `- ${m.username}\n`;
-    });
-
-    text += "\n";
+    text += `<@${entry.userId}> has submitted the survey\n`;
+    text += `Host: ${entry.host ? "Yes" : "No"}\n`;
+    text += `Package: ${entry.package}\n`;
+    text += `Raid: ${entry.raid}\n\n`;
   }
 
-  text += `Waiting: ${queue.length}`;
+  text += `Total in queue: ${queue.length}`;
 
   if (!statsMessageId) {
     const msg = await channel.send(text);
