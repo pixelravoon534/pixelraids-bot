@@ -1,9 +1,6 @@
 const {
   Client,
   GatewayIntentBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   PermissionsBitField,
   ChannelType
 } = require("discord.js");
@@ -16,254 +13,184 @@ const client = new Client({
   ]
 });
 
+// ================= STATE =================
+
 let queue = [];
-let activeGroup = null;
-let raidCount = 1;
+let groups = [];
+let activeRaid = null;
+let statsMessageId = null;
 
-// =====================
-// SETUP SERVER
-// =====================
+// ================= READY =================
+
+client.once("ready", () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+// ================= SURVEY ADD (SIMPLE ENTRY POINT) =================
+// You can replace this later with your button/survey system
+
 client.on("messageCreate", async (message) => {
-  if (message.content !== "!setup") return;
+  if (message.author.bot) return;
 
-  if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    return message.reply("❌ Admin only.");
+  if (message.content.startsWith("!join")) {
+    const args = message.content.split(" ");
+
+    const username = args[1] || message.author.username;
+    const raid = args[2] || "Unknown";
+    const pack = args[3] || "1";
+
+    queue.push({
+      id: message.author.id,
+      username,
+      raid,
+      package: pack,
+      isHost: false
+    });
+
+    buildGroups();
+    updateStats(message.guild);
+
+    message.reply("Added to queue.");
   }
+});
+
+// ================= GROUP BUILDER =================
+
+function buildGroups() {
+  groups = [];
+
+  let copy = [...queue];
+
+  while (copy.length > 0) {
+    const host = copy.shift();
+
+    let group = [host];
+
+    // fill up to 3 players max
+    for (let i = 0; i < copy.length && group.length < 3; i++) {
+      group.push(copy[i]);
+      copy.splice(i, 1);
+      i--;
+    }
+
+    groups.push(group);
+  }
+}
+
+// ================= STATS =================
+
+async function updateStats(guild) {
+  const channel = guild.channels.cache.find(c => c.name === "queue-stats");
+  if (!channel) return;
+
+  let text = "PIXELRAIDS STATS\n\n";
+
+  for (let i = 0; i < 3; i++) {
+    const g = groups[i];
+
+    text += `GROUP ${i + 1}:\n`;
+
+    if (!g) {
+      text += "No group\n\n";
+      continue;
+    }
+
+    const host = g[0];
+
+    text += `Host: ${host?.username || "none"}\n`;
+
+    const members = g.slice(1);
+
+    if (members.length === 0) {
+      text += "Members: none\n\n";
+    } else {
+      text += "Members:\n";
+      members.forEach(m => {
+        text += `- ${m.username}\n`;
+      });
+      text += "\n";
+    }
+  }
+
+  text += `Waiting: ${queue.length}`;
+
+  if (!statsMessageId) {
+    const msg = await channel.send(text);
+    statsMessageId = msg.id;
+  } else {
+    const msg = await channel.messages.fetch(statsMessageId).catch(() => null);
+    if (msg) msg.edit(text);
+  }
+}
+
+// ================= START RAID =================
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (message.content !== "!beginraids") return;
+  if (message.channel.name !== "admin-control") return;
+
+  if (!groups[0]) return message.reply("No groups ready.");
+
+  activeRaid = groups.shift();
 
   const guild = message.guild;
 
-  const surveyCat = await guild.channels.create({ name: "SURVEYS", type: 4 });
-  const raidCat = await guild.channels.create({ name: "RAID SYSTEM", type: 4 });
-  const adminCat = await guild.channels.create({ name: "ADMIN", type: 4 });
-
-  await guild.channels.create({
-    name: "raid-survey",
-    type: 0,
-    parent: surveyCat.id
-  });
-
-  await guild.channels.create({
-    name: "queue-status",
-    type: 0,
-    parent: raidCat.id
-  });
-
-  await guild.channels.create({
-    name: "raid-logs",
-    type: 0,
-    parent: raidCat.id
-  });
-
-  await guild.channels.create({
-    name: "admin-control",
-    type: 0,
-    parent: adminCat.id
-  });
-
-  message.channel.send("✅ Setup complete!");
-});
-
-// =====================
-// PANEL BUTTON
-// =====================
-client.on("messageCreate", async (message) => {
-  if (message.content !== "!panel") return;
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("start_survey")
-      .setLabel("🎮 Start Raid Application")
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  message.channel.send({
-    content: "Click to apply for a raid 👇",
-    components: [row]
-  });
-});
-
-// =====================
-// BUTTON CLICK
-// =====================
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId === "start_survey") {
-
-    const channel = await interaction.guild.channels.create({
-      name: `survey-${interaction.user.username}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        {
-          id: interaction.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        },
-        {
-          id: interaction.client.user.id,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
-          ]
-        }
-      ]
-    });
-
-    await interaction.reply({
-      content: `Survey created: ${channel}`,
-      ephemeral: true
-    });
-
-    runSurvey(channel, interaction.user);
-  }
-});
-
-// =====================
-// SURVEY SYSTEM
-// =====================
-async function runSurvey(channel, user) {
-
-  const data = {};
-
-  await channel.send("1️⃣ Roblox username?");
-  data.username = (await channel.awaitMessages({
-    filter: m => m.author.id === user.id,
-    max: 1,
-    time: 120000
-  })).first().content;
-
-  await channel.send("2️⃣ Are you hosting? (yes/no)");
-  data.isHost = (await channel.awaitMessages({
-    filter: m => m.author.id === user.id,
-    max: 1,
-    time: 120000
-  })).first().content.toLowerCase() === "yes";
-
-  await channel.send(
-`3️⃣ Raid type:
-Flame, Ice, Sand, Dark, Light, Magma, Quake, Buddha, String, Rumble, Paw, Dough, Phoenix`
-  );
-
-  data.raid = (await channel.awaitMessages({
-    filter: m => m.author.id === user.id,
-    max: 1,
-    time: 120000
-  })).first().content;
-
-  await channel.send(
-`4️⃣ Package:
-1 = Free slow
-2 = Faster
-3 = Fruit fast
-unlimited = Boost`
-  );
-
-  data.packageType = (await channel.awaitMessages({
-    filter: m => m.author.id === user.id,
-    max: 1,
-    time: 120000
-  })).first().content;
-
-  queue.push({
-    id: user.id,
-    ...data
-  });
-
-  await channel.send("✅ Added to queue!");
-
-  setTimeout(() => channel.delete().catch(() => {}), 3000);
-}
-
-// =====================
-// BEGIN RAIDS
-// =====================
-client.on("messageCreate", async (message) => {
-  if (message.content !== "!beginraids") return;
-
-  if (activeGroup) return message.reply("Raid already active.");
-
-  let hostIndex = queue.findIndex(p => p.isHost);
-  if (hostIndex === -1) return message.reply("No host found.");
-
-  let host = queue.splice(hostIndex, 1)[0];
-
-  let group = [host];
-
-  for (let i = 0; i < queue.length; i++) {
-    let p = queue[i];
-
-    if (host.packageType === "1" && p.raid !== host.raid) continue;
-
-    group.push(p);
-    queue.splice(i, 1);
-    i--;
-
-    if (group.length >= 3 && host.packageType !== "unlimited") break;
-  }
-
-  activeGroup = group;
-
-  const channel = await message.guild.channels.create({
-    name: `raid-${raidCount++}`,
+  const raidChannel = await guild.channels.create({
+    name: `raid-${Date.now()}`,
     type: ChannelType.GuildText,
     permissionOverwrites: [
       {
-        id: message.guild.id,
+        id: guild.id,
         deny: [PermissionsBitField.Flags.ViewChannel]
       },
-      ...group.map(p => ({
-        id: p.id,
+      {
+        id: client.user.id,
         allow: [
           PermissionsBitField.Flags.ViewChannel,
           PermissionsBitField.Flags.SendMessages
         ]
-      }))
+      }
     ]
   });
 
-  channel.send(
-`🔥 RAID STARTED 🔥
+  let info = "PIXELRAIDS RAID STARTED\n\n";
 
-🎮 HOST:
-<@${host.id}>
-👤 ${host.username}
+  activeRaid.forEach(p => {
+    info += `${p.username} | ${p.raid} | ${p.package}\n`;
+  });
 
-👥 MEMBERS:
+  raidChannel.send(info);
 
-${group.map(p =>
-`• <@${p.id}>
-  👤 ${p.username}
-  🎯 ${p.raid}
-  📦 ${p.packageType}`
-).join("\n")}
-`
-  );
+  updateStats(guild);
 });
 
-// =====================
-// FINISH RAID
-// =====================
+// ================= RAID FINISH =================
+
 client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
   if (message.content !== "!raidfinish") return;
+  if (message.channel.name !== "admin-control") return;
 
-  activeGroup = null;
+  const logChannel = message.guild.channels.cache.find(c => c.name === "raid-logs");
 
-  message.reply("Raid finished. Deleting channel...");
+  const time = new Date().toISOString();
 
-  setTimeout(() => {
-    message.channel.delete().catch(() => {});
-  }, 3000);
+  if (activeRaid && logChannel) {
+    let log = "PIXELRAIDS RAID LOG\n\n";
+    log += `TIME (UTC): ${time}\n\n`;
+
+    activeRaid.forEach(p => {
+      log += `${p.username} | ${p.raid} | ${p.package}\n`;
+    });
+
+    logChannel.send(log);
+  }
+
+  activeRaid = null;
+  message.reply("Raid finished.");
 });
 
-// =====================
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
+// ================= LOGIN =================
 
 client.login(process.env.TOKEN);
