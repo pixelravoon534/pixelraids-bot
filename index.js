@@ -43,7 +43,7 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   // =================================================
-  // !SURVEY (EVERYONE)
+  // !SURVEY
   // =================================================
 
   if (message.content === "!survey") {
@@ -118,94 +118,90 @@ client.on("messageCreate", async (message) => {
   }
 
   // =================================================
-  // !ENDRAIDS
+  // !ENDRAID
   // =================================================
 
-  if (message.content === "!endraids") {
+  if (message.content === "!endraid") {
 
-    console.log("🔥 ENDRAIDS TRIGGERED");
-
-    if (!message.channel.name.startsWith("raid-")) {
-      console.log("❌ NOT RAID CHANNEL");
-      return message.reply("Use this inside a raid channel.");
+    if (message.channel.name !== ADMIN_CHANNEL_NAME) {
+      return message.reply("Use this in admin-control.");
     }
+
+    console.log("🔥 ENDRAID STARTED");
+
+    const raidChannels = message.guild.channels.cache.filter(
+      c =>
+        c.name.startsWith("raid-") &&
+        c.name !== LOG_CHANNEL_NAME &&
+        c.type === ChannelType.GuildText
+    );
+
+    console.log(`📌 FOUND ${raidChannels.size} RAID CHANNELS`);
 
     const logChannel = message.guild.channels.cache.find(
       c => c.name === LOG_CHANNEL_NAME
     );
 
-    console.log("📌 LOG CHANNEL:", logChannel?.name);
+    for (const [, raidChannel] of raidChannels) {
 
-    try {
+      try {
 
-      const fetched = await message.channel.messages.fetch({
-        limit: 100
-      });
-
-      const mentions = fetched
-        .map(m => m.mentions.users)
-        .flatMap(u => [...u.values()])
-        .filter(u =>
-          u.id !== OWNER_ID &&
-          !u.bot
-        );
-
-      const unique = [...new Map(
-        mentions.map(u => [u.id, u])
-      ).values()];
-
-      let memberText = "No members";
-
-      if (unique.length > 0) {
-        memberText = unique
-          .map(u => `<@${u.id}>`)
-          .join(" ");
-      }
-
-      // =================================================
-      // SAFE LOG SEND
-      // =================================================
-
-      if (logChannel) {
-
-        await logChannel.send(
-          `A Raid has been completed by ${memberText}`
-        ).catch(err => {
-          console.log("❌ LOG SEND FAILED:", err);
+        const fetched = await raidChannel.messages.fetch({
+          limit: 100
         });
 
-      } else {
+        const mentions = fetched
+          .map(m => m.mentions.users)
+          .flatMap(u => [...u.values()])
+          .filter(u =>
+            u.id !== OWNER_ID &&
+            !u.bot
+          );
 
-        console.log("❌ RAID LOGS CHANNEL NOT FOUND");
-      }
+        const unique = [...new Map(
+          mentions.map(u => [u.id, u])
+        ).values()];
 
-      // =================================================
-      // DELETE RAID CHANNEL
-      // =================================================
+        let memberText = "No members";
 
-      console.log("🧨 DELETING RAID CHANNEL");
-
-      await message.channel.send("Ending raid...");
-
-      setTimeout(async () => {
-
-        try {
-
-          await message.channel.delete();
-
-          console.log("✅ RAID CHANNEL DELETED");
-
-        } catch (err) {
-
-          console.log("❌ DELETE FAILED:", err);
+        if (unique.length > 0) {
+          memberText = unique
+            .map(u => `<@${u.id}>`)
+            .join(" ");
         }
 
-      }, 3000);
+        // =================================================
+        // SEND LOG
+        // =================================================
 
-    } catch (err) {
+        if (logChannel) {
 
-      console.log("💥 ENDRAIDS ERROR:", err);
+          await logChannel.send(
+            `A Raid has been completed by ${memberText}`
+          ).catch(err => {
+            console.log("❌ LOG SEND FAILED:", err);
+          });
+
+        } else {
+
+          console.log("❌ RAID LOGS CHANNEL NOT FOUND");
+        }
+
+        // =================================================
+        // DELETE RAID CHANNEL
+        // =================================================
+
+        await raidChannel.delete();
+
+        console.log(`✅ Deleted ${raidChannel.name}`);
+
+      } catch (err) {
+
+        console.log(`❌ Failed deleting ${raidChannel.name}:`, err);
+      }
     }
+
+    await message.channel.send("✅ All raid channels deleted.");
 
     return;
   }
@@ -244,7 +240,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   // =================================================
-  // OPEN PRIVATE SURVEY CHANNEL
+  // OPEN SURVEY CHANNEL
   // =================================================
 
   if (interaction.customId === "open_survey_channel") {
