@@ -34,23 +34,23 @@ client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
 
-  if (message.content === "!survey") {
+  if (message.content.trim() === "!survey") {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("survey_start")
+        .setCustomId("start_survey")
         .setLabel("Start Survey")
         .setStyle(ButtonStyle.Primary)
     );
 
-    message.channel.send({
+    await message.channel.send({
       content: "Click to start your survey",
       components: [row]
     });
   }
 });
 
-// ================= STEP 1 BUTTON =================
+// ================= BUTTON FLOW =================
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
@@ -59,29 +59,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const user = interaction.user;
   const guild = interaction.guild;
 
-  // ================= STEP 1: CLICK START =================
+  // ================= STEP 1 =================
 
-  if (interaction.customId === "survey_start") {
+  if (interaction.customId === "start_survey") {
 
-    const openRow = new ActionRowBuilder().addComponents(
+    const channelRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("open_channel")
-        .setLabel("Open Your Survey Channel")
+        .setCustomId("create_channel")
+        .setLabel("Open Survey Channel")
         .setStyle(ButtonStyle.Success)
     );
 
-    await interaction.reply({
+    return interaction.reply({
       content: "Here is your channel",
-      components: [openRow],
+      components: [channelRow],
       ephemeral: true
     });
   }
 
-  // ================= STEP 2: CREATE CHANNEL =================
+  // ================= STEP 2 =================
 
-  if (interaction.customId === "open_channel") {
-
-    const user = interaction.user;
+  if (interaction.customId === "create_channel") {
 
     const channel = await guild.channels.create({
       name: `survey-${user.username}`,
@@ -110,7 +108,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
 
     await interaction.reply({
-      content: `Your channel: ${channel}`,
+      content: `Your survey channel: ${channel}`,
       ephemeral: true
     });
 
@@ -131,7 +129,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const hostRaw = await ask("1. Do you want to be the Host?");
     const packageRaw = await ask("2. Select your package (1 / 2 / 3 / Unlimited)");
     const raidRaw = await ask("3. Select a raid");
-    const robloxRaw = await ask("4. Roblox Username");
+    const robloxRaw = await ask("4. What is your Roblox Username?");
 
     // ================= QUEUE =================
 
@@ -143,9 +141,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       robloxRaw
     });
 
+    console.log("📥 NEW QUEUE ENTRY:", queue[queue.length - 1]);
+
     updateStats(guild);
 
-    channel.send("Survey complete. You are in queue.");
+    await channel.send("Survey complete. You are in the queue.");
 
     setTimeout(() => {
       channel.delete().catch(() => {});
@@ -153,23 +153,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// ================= STATS (FIXED RELIABLE VERSION) =================
+// ================= STATS (FULL DEBUG VERSION) =================
 
 async function updateStats(guild) {
 
+  console.log("🔥 updateStats CALLED");
+
   const channel = guild.channels.cache.find(c => c.name === "queue-stats");
 
+  console.log("📌 queue-stats channel:", channel?.name);
+
   if (!channel) {
-    console.log("[STATS ERROR] queue-stats not found");
+    console.log("❌ queue-stats NOT FOUND");
     return;
   }
 
   const bot = guild.members.me;
 
-  if (!channel.permissionsFor(bot)?.has(["ViewChannel", "SendMessages"])) {
-    console.log("[STATS ERROR] missing permissions");
+  if (!channel.permissionsFor(bot)?.has([
+    "ViewChannel",
+    "SendMessages",
+    "ReadMessageHistory"
+  ])) {
+    console.log("❌ BOT MISSING PERMISSIONS IN queue-stats");
     return;
   }
+
+  console.log("📊 queue length:", queue.length);
 
   let text = "QUEUE STATS\n\n";
 
@@ -177,12 +187,13 @@ async function updateStats(guild) {
     text += "No players in queue\n";
   } else {
 
-    for (const e of queue) {
-      text += `<@${e.userId}> has submitted the survey\n`;
-      text += `Host: ${e.hostRaw}\n`;
-      text += `Package: ${e.packageRaw}\n`;
-      text += `Raid: ${e.raidRaw}\n`;
-      text += `Roblox Username: ${e.robloxRaw}\n\n`;
+    for (const entry of queue) {
+
+      text += `<@${entry.userId}> has submitted the survey\n`;
+      text += `Host: ${entry.hostRaw}\n`;
+      text += `Package: ${entry.packageRaw}\n`;
+      text += `Raid: ${entry.raidRaw}\n`;
+      text += `Roblox Username: ${entry.robloxRaw}\n\n`;
     }
   }
 
@@ -190,22 +201,27 @@ async function updateStats(guild) {
 
   try {
 
+    console.log("📤 sending/editing stats...");
+
     if (!statsMessageId) {
       const msg = await channel.send(text);
       statsMessageId = msg.id;
+      console.log("✅ stats message created");
     } else {
       const msg = await channel.messages.fetch(statsMessageId).catch(() => null);
 
       if (!msg) {
         const newMsg = await channel.send(text);
         statsMessageId = newMsg.id;
+        console.log("♻ stats recreated");
       } else {
         await msg.edit(text);
+        console.log("✏ stats updated");
       }
     }
 
   } catch (err) {
-    console.log("[STATS ERROR]", err);
+    console.log("💥 STATS ERROR:", err);
   }
 }
 
