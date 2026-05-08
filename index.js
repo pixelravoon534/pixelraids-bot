@@ -28,7 +28,6 @@ const LOG_CHANNEL_NAME = "raid-logs";
 // ================= STATE =================
 
 let queue = [];
-let statsMessageId = null;
 
 // ================= READY =================
 
@@ -127,16 +126,12 @@ client.on("messageCreate", async (message) => {
       return message.reply("Use this in admin-control.");
     }
 
-    console.log("🔥 ENDRAID STARTED");
-
     const raidChannels = message.guild.channels.cache.filter(
       c =>
         c.name.startsWith("raid-") &&
         c.name !== LOG_CHANNEL_NAME &&
         c.type === ChannelType.GuildText
     );
-
-    console.log(`📌 FOUND ${raidChannels.size} RAID CHANNELS`);
 
     const logChannel = message.guild.channels.cache.find(
       c => c.name === LOG_CHANNEL_NAME
@@ -170,38 +165,26 @@ client.on("messageCreate", async (message) => {
             .join(" ");
         }
 
-        // =================================================
         // SEND LOG
-        // =================================================
 
         if (logChannel) {
 
           await logChannel.send(
             `A Raid has been completed by ${memberText}`
-          ).catch(err => {
-            console.log("❌ LOG SEND FAILED:", err);
-          });
-
-        } else {
-
-          console.log("❌ RAID LOGS CHANNEL NOT FOUND");
+          ).catch(() => {});
         }
 
-        // =================================================
         // DELETE RAID CHANNEL
-        // =================================================
 
-        await raidChannel.delete();
-
-        console.log(`✅ Deleted ${raidChannel.name}`);
+        await raidChannel.delete().catch(() => {});
 
       } catch (err) {
 
-        console.log(`❌ Failed deleting ${raidChannel.name}:`, err);
+        console.log(err);
       }
     }
 
-    await message.channel.send("✅ All raid channels deleted.");
+    await message.channel.send("All raid channels deleted.");
 
     return;
   }
@@ -223,40 +206,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.customId === "start_survey") {
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("open_survey_channel")
-        .setLabel("Open Survey Channel")
-        .setStyle(ButtonStyle.Success)
-    );
-
-    await interaction.reply({
-      content: "Here is your channel",
-      components: [row],
-      ephemeral: true
-    });
-
-    return;
-  }
-
-  // =================================================
-  // OPEN SURVEY CHANNEL
-  // =================================================
-
-  if (interaction.customId === "open_survey_channel") {
-
     const existing = guild.channels.cache.find(
       c => c.name === `survey-${user.username}`
     );
 
     if (existing) {
 
-      await interaction.reply({
-        content: `You already have a survey channel: ${existing}`,
+      return interaction.reply({
+        content: `Here is your survey channel: ${existing}`,
         ephemeral: true
       });
-
-      return;
     }
 
     const surveyChannel = await guild.channels.create({
@@ -288,8 +247,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       ]
     });
 
+    // SEND CHANNEL LINK
+
     await interaction.reply({
-      content: `Your survey channel: ${surveyChannel}`,
+      content: `Here is your survey channel: ${surveyChannel}`,
       ephemeral: true
     });
 
@@ -316,10 +277,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ask("1. Do you want to be the Host?");
 
     const packageRaw =
-      await ask("2. How many Raids do you need?");
+      await ask("2. Select your package");
 
     const raidRaw =
-      await ask("3. What type raid of raid?");
+      await ask("3. Select a raid");
 
     const robloxRaw =
       await ask("4. What is your Roblox Username?");
@@ -336,12 +297,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       robloxRaw
     });
 
-    console.log("📥 NEW QUEUE ENTRY:", queue[queue.length - 1]);
-
     await updateStats(guild);
 
     await surveyChannel.send(
-      "Survey completed. You are now in queue. If you typed wrong, you will not be matchmaking, if so, please start a new Survey"
+      "Survey completed. You are now in queue."
     );
 
     setTimeout(() => {
@@ -357,74 +316,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 async function updateStats(guild) {
 
-  console.log("🔥 updateStats CALLED");
-
   const channel = guild.channels.cache.find(
     c => c.name === QUEUE_CHANNEL_NAME
   );
 
-  console.log("📌 queue channel:", channel?.name);
-
-  if (!channel) {
-    console.log("❌ QUEUE CHANNEL NOT FOUND");
-    return;
-  }
-
-  let text = "QUEUE STATUS\n\n";
-
-  if (queue.length === 0) {
-
-    text += "No players in queue";
-
-  } else {
-
-    for (const entry of queue) {
-
-      text += `<@${entry.userId}> has submitted the survey\n`;
-      text += `Host: ${entry.hostRaw}\n`;
-      text += `Amount of Raids: ${entry.packageRaw}\n`;
-      text += `Raid: ${entry.raidRaw}\n`;
-      text += `Roblox Username: ${entry.robloxRaw}\n\n`;
-    }
-  }
-
-  text += `Total in queue: ${queue.length}`;
+  if (!channel) return;
 
   try {
 
-    if (!statsMessageId) {
+    const oldMessages = await channel.messages.fetch({
+      limit: 100
+    });
 
-      const msg = await channel.send(text);
+    await channel.bulkDelete(oldMessages, true).catch(() => {});
 
-      statsMessageId = msg.id;
+    for (const entry of queue) {
 
-      console.log("✅ STATS MESSAGE CREATED");
+      await channel.send(
+`<@${entry.userId}> has submitted the survey
 
-    } else {
-
-      const msg = await channel.messages
-        .fetch(statsMessageId)
-        .catch(() => null);
-
-      if (!msg) {
-
-        const newMsg = await channel.send(text);
-
-        statsMessageId = newMsg.id;
-
-        console.log("♻ STATS MESSAGE RECREATED");
-
-      } else {
-
-        await msg.edit(text);
-
-        console.log("✏ STATS UPDATED");
-      }
+Host: ${entry.hostRaw}
+Package: ${entry.packageRaw}
+Raid: ${entry.raidRaw}
+Roblox Username: ${entry.robloxRaw}`
+      );
     }
 
   } catch (err) {
 
-    console.log("💥 STATS ERROR:", err);
+    console.log("STATS ERROR:", err);
   }
 }
 
