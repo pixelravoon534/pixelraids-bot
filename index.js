@@ -277,10 +277,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ask("1. Do you want to be the Host?");
 
     const packageRaw =
-      await ask("2. How many Raids? (Max 3 per survey)");
+      await ask("2. Select your package");
 
     const raidRaw =
-      await ask("3. Which type of raid do you need?");
+      await ask("3. Select a raid");
 
     const robloxRaw =
       await ask("4. What is your Roblox Username?");
@@ -289,15 +289,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // ADD TO QUEUE
     // =================================================
 
-    queue.push({
+    const newEntry = {
       userId: user.id,
       hostRaw,
       packageRaw,
       raidRaw,
       robloxRaw
-    });
+    };
 
-    await updateStats(guild);
+    queue.push(newEntry);
+
+    await updateStats(guild, newEntry);
 
     await surveyChannel.send(
       "Survey done. Wait to be pinged. Wrong info may remove your queue, but you can resubmit."
@@ -314,7 +316,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // ================= UPDATE STATS =================
 
-async function updateStats(guild) {
+async function updateStats(guild, entry) {
 
   const channel = guild.channels.cache.find(
     c => c.name === QUEUE_CHANNEL_NAME
@@ -324,23 +326,14 @@ async function updateStats(guild) {
 
   try {
 
-    const oldMessages = await channel.messages.fetch({
-      limit: 100
-    });
-
-    await channel.bulkDelete(oldMessages, true).catch(() => {});
-
-    for (const entry of queue) {
-
-      await channel.send(
+    await channel.send(
 `<@${entry.userId}> has submitted the survey
 
 Host: ${entry.hostRaw}
-Amount of Raids: ${entry.packageRaw}
-Fruit Raid Type: ${entry.raidRaw}
+Package: ${entry.packageRaw}
+Raid: ${entry.raidRaw}
 Roblox Username: ${entry.robloxRaw}`
-      );
-    }
+    );
 
   } catch (err) {
 
