@@ -274,10 +274,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     };
 
     const hostRaw =
-      await ask("1. Do you want to be the Host?");
+      await ask("1. Can you be the Host?");
 
     const packageRaw =
-      await ask("2. How many Raids do you need");
+      await ask("2. How many Raids do you need? (Max 3 per survey)");
 
     const raidRaw =
       await ask("3. Choose a Raid Fruit");
@@ -330,7 +330,7 @@ async function updateStats(guild, entry) {
 `<@${entry.userId}> has submitted the survey
 
 Host: ${entry.hostRaw}
-Package: ${entry.packageRaw}
+Amount of Raids: ${entry.packageRaw}
 Raid: ${entry.raidRaw}
 Roblox Username: ${entry.robloxRaw}`
     );
