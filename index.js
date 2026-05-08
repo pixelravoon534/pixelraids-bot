@@ -277,10 +277,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ask("1. Do you want to be the Host?");
 
     const packageRaw =
-      await ask("2. Select your package");
+      await ask("2. How many Raids? (Max 3 per survey)");
 
     const raidRaw =
-      await ask("3. Select a raid");
+      await ask("3. Which type of raid do you need?");
 
     const robloxRaw =
       await ask("4. What is your Roblox Username?");
@@ -300,7 +300,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await updateStats(guild);
 
     await surveyChannel.send(
-      "Survey completed. You are now in queue."
+      ""Survey done. Wait to be pinged. Wrong info may remove your queue, but you can resubmit.")"
     );
 
     setTimeout(() => {
@@ -336,8 +336,8 @@ async function updateStats(guild) {
 `<@${entry.userId}> has submitted the survey
 
 Host: ${entry.hostRaw}
-Package: ${entry.packageRaw}
-Raid: ${entry.raidRaw}
+Amount of Raids: ${entry.packageRaw}
+Fruit Raid Type: ${entry.raidRaw}
 Roblox Username: ${entry.robloxRaw}`
       );
     }
