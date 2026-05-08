@@ -277,10 +277,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await ask("1. Do you want to be the Host?");
 
     const packageRaw =
-      await ask("2. Select your package");
+      await ask("2. How many Raids do you need");
 
     const raidRaw =
-      await ask("3. Select a raid");
+      await ask("3. Choose a Raid Fruit");
 
     const robloxRaw =
       await ask("4. What is your Roblox Username?");
