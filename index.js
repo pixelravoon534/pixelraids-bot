@@ -300,7 +300,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await updateStats(guild);
 
     await surveyChannel.send(
-      ""Survey done. Wait to be pinged. Wrong info may remove your queue, but you can resubmit.")"
+      "Survey done. Wait to be pinged. Wrong info may remove your queue, but you can resubmit.)"
     );
 
     setTimeout(() => {
