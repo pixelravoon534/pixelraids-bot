@@ -9,12 +9,27 @@ const {
   Events
 } = require("discord.js");
 
+const http = require("http"); // Added for Render web server
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
+});
+
+// ================= RENDER KEEP-ALIVE WEB SERVER =================
+// This creates a small server that tells Render your bot is alive.
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("Bot is online!");
+});
+
+// Render automatically provides a PORT environment variable. We use 3000 as a backup.
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Web server is listening on port ${PORT}`);
 });
 
 // ================= CONFIG =================
@@ -31,7 +46,6 @@ let queue = [];
 
 // ================= READY =================
 
-// FIXED: Changed "clientReady" to "ready" so the bot actually turns on
 client.once("ready", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
@@ -344,4 +358,5 @@ Roblox Username: ${entry.robloxRaw}`
 
 // ================= LOGIN =================
 
+// Note: Ensure you have added the variable named TOKEN under Environment Variables in Render.
 client.login(process.env.TOKEN);
