@@ -31,7 +31,8 @@ let queue = [];
 
 // ================= READY =================
 
-client.once("clientReady", () => {
+// FIXED: Changed "clientReady" to "ready" so the bot actually turns on
+client.once("ready", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
 
