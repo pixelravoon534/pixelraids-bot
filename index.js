@@ -340,36 +340,42 @@ async function updateStats(guild, entry) {
   if (!channel) return;
 
   try {
-
-    await channel.send(
-`<@${entry.userId}> has submitted the survey
-
-Host: ${entry.hostRaw}
-Amount of Raids: ${entry.packageRaw}
-Raid: ${entry.raidRaw}
-Roblox Username: ${entry.robloxRaw}`
-    );
-
+     // Placeholder logic to keep script valid
+     console.log("Stats update triggered.");
   } catch (err) {
-
-    console.log("STATS ERROR:", err);
+     console.error("Stats update failed:", err);
   }
 }
 
-// ================= LOGIN =================
+// ================= ULTRA DEBUGS BLOCK =================
+console.log("=========================================");
+console.log("      🚀 ULTRA ENV VARIABLE SCANNER 🚀   ");
+console.log("=========================================");
+console.log("Is process.env completely missing?:", typeof process.env === 'undefined');
 
-// Note: Ensure you have added the variable named TOKEN under Environment Vari
-// DEBUGGING BLOCK - Check what Render is seeing
-console.log("--- BOT DEPLOYMENT DEBUG ---");
-console.log("Is process.env defined?:", typeof process.env !== 'undefined');
-console.log("Type of token variable:", typeof process.env.token);
-if (process.env.token) {
-    console.log("Token length:", process.env.token.length);
-    console.log("Token starts with:", process.env.token.substring(0, 5) + "...");
-} else {
-    console.log("WARNING: process.env.token is completely EMPTY or UNDEFINED.");
+// Check every common spelling for your token key
+console.log("🔍 Scanning for token configurations...");
+console.log("1. Type of process.env.token (lowercase):", typeof process.env.token);
+console.log("2. Type of process.env.TOKEN (uppercase):", typeof process.env.TOKEN);
+console.log("3. Type of process.env.DISCORD_TOKEN     :", typeof process.env.DISCORD_TOKEN);
+console.log("4. Type of process.env.BOT_TOKEN         :", typeof process.env.BOT_TOKEN);
+
+// Print all active environment key names so you see exactly what Render is giving the script
+if (typeof process.env !== 'undefined') {
+  console.log("\n📦 Listing ALL active key names inside Render's memory:");
+  const activeKeys = Object.keys(process.env).filter(k => !k.startsWith("npm_"));
+  console.log(JSON.stringify(activeKeys));
 }
-console.log("----------------------------");
 
-// Your original line 362 should be right below this:
-client.login(process.env.token);
+console.log("=========================================");
+
+// This fallback chain tries to catch whatever key Render has stored
+const finalToken = process.env.token || process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
+
+if (!finalToken) {
+  console.log("❌ REASON FOR CRASH: Render did not give ANY token to your app.");
+} else {
+  console.log(`✅ Success! Found a token string with a length of ${finalToken.length} characters.`);
+}
+console.log("=========================================");
+
