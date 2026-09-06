@@ -358,5 +358,18 @@ Roblox Username: ${entry.robloxRaw}`
 
 // ================= LOGIN =================
 
-// Note: Ensure you have added the variable named TOKEN under Environment Variables in Render.
-client.login(process.env.TOKEN);
+// Note: Ensure you have added the variable named TOKEN under Environment Vari
+// DEBUGGING BLOCK - Check what Render is seeing
+console.log("--- BOT DEPLOYMENT DEBUG ---");
+console.log("Is process.env defined?:", typeof process.env !== 'undefined');
+console.log("Type of token variable:", typeof process.env.token);
+if (process.env.token) {
+    console.log("Token length:", process.env.token.length);
+    console.log("Token starts with:", process.env.token.substring(0, 5) + "...");
+} else {
+    console.log("WARNING: process.env.token is completely EMPTY or UNDEFINED.");
+}
+console.log("----------------------------");
+
+// Your original line 362 should be right below this:
+client.login(process.env.token);
