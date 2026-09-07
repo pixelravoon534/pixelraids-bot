@@ -296,19 +296,9 @@ async function updateStats(guild, entry) {
 }
 
 // ================= LOGIN TO DISCORD =================
-const finalToken =
-  process.env.token ||
-  process.env.DISCORD_TOKEN ||
-  process.env.TOKEN ||
-  process.env.BOT_TOKEN;
+const finalToken = "YOUR_BOT_TOKEN_HERE";
 
-if (!finalToken) {
-  console.error(
-    "❌ CRITICAL ERROR: Could not find your token variable! Make sure it is set in Render Environment Variables."
-  );
-} else {
-  console.log(`✅ Token detected (${finalToken.length} chars). Connecting to Discord...`);
-  client.login(finalToken).catch((err) => {
-    console.error("❌ LOGIN FAILED:", err.message);
-  });
-}
+console.log("Attempting connection to Discord...");
+client.login(finalToken).catch((err) => {
+  console.error("❌ LOGIN FAILED:", err.message);
+});
