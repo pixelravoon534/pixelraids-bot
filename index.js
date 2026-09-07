@@ -9,7 +9,7 @@ const {
   Events
 } = require("discord.js");
 
-const http = require("http"); // Added for Render web server
+const http = require("http");
 
 const client = new Client({
   intents: [
@@ -20,20 +20,17 @@ const client = new Client({
 });
 
 // ================= RENDER KEEP-ALIVE WEB SERVER =================
-// This creates a small server that tells Render your bot is alive.
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("Bot is online!");
 });
 
-// Render automatically provides a PORT environment variable. We use 3000 as a backup.
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Web server is listening on port ${PORT}`);
 });
 
 // ================= CONFIG =================
-
 const OWNER_ID = "1471335626522624151";
 
 const ADMIN_CHANNEL_NAME = "admin-control";
@@ -41,27 +38,21 @@ const QUEUE_CHANNEL_NAME = "queue-status";
 const LOG_CHANNEL_NAME = "raid-logs";
 
 // ================= STATE =================
-
 let queue = [];
 
 // ================= READY =================
-
 client.once("ready", () => {
   console.log(`ONLINE: ${client.user.tag}`);
 });
 
 // ================= MESSAGE COMMANDS =================
-
 client.on("messageCreate", async (message) => {
-
   if (message.author.bot) return;
 
   // =================================================
   // !SURVEY
   // =================================================
-
   if (message.content === "!survey") {
-
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("start_survey")
@@ -80,15 +71,12 @@ client.on("messageCreate", async (message) => {
   // =================================================
   // OWNER ONLY
   // =================================================
-
   if (message.author.id !== OWNER_ID) return;
 
   // =================================================
   // !STARTRAID
   // =================================================
-
   if (message.content === "!startraid") {
-
     if (message.channel.name !== ADMIN_CHANNEL_NAME) {
       return message.reply("Use this in admin-control.");
     }
@@ -101,7 +89,6 @@ client.on("messageCreate", async (message) => {
           id: message.guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
-
         {
           id: OWNER_ID,
           allow: [
@@ -111,7 +98,6 @@ client.on("messageCreate", async (message) => {
             PermissionsBitField.Flags.ManageChannels
           ]
         },
-
         {
           id: client.user.id,
           allow: [
@@ -125,7 +111,6 @@ client.on("messageCreate", async (message) => {
     });
 
     await raidChannel.send("Raid channel created.");
-
     await message.reply(`Raid created: ${raidChannel}`);
 
     return;
@@ -134,9 +119,7 @@ client.on("messageCreate", async (message) => {
   // =================================================
   // !ENDRAID
   // =================================================
-
   if (message.content === "!endraid") {
-
     if (message.channel.name !== ADMIN_CHANNEL_NAME) {
       return message.reply("Use this in admin-control.");
     }
@@ -153,9 +136,7 @@ client.on("messageCreate", async (message) => {
     );
 
     for (const [, raidChannel] of raidChannels) {
-
       try {
-
         const fetched = await raidChannel.messages.fetch({
           limit: 100
         });
@@ -163,38 +144,28 @@ client.on("messageCreate", async (message) => {
         const mentions = fetched
           .map(m => m.mentions.users)
           .flatMap(u => [...u.values()])
-          .filter(u =>
-            u.id !== OWNER_ID &&
-            !u.bot
-          );
+          .filter(u => u.id !== OWNER_ID && !u.bot);
 
-        const unique = [...new Map(
-          mentions.map(u => [u.id, u])
-        ).values()];
+        const unique = [
+          ...new Map(mentions.map(u => [u.id, u])).values()
+        ];
 
         let memberText = "No members";
 
         if (unique.length > 0) {
-          memberText = unique
-            .map(u => `<@${u.id}>`)
-            .join(" ");
+          memberText = unique.map(u => `<@${u.id}>`).join(" ");
         }
 
         // SEND LOG
-
         if (logChannel) {
-
-          await logChannel.send(
-            `A Raid has been completed by ${memberText}`
-          ).catch(() => {});
+          await logChannel
+            .send(`A Raid has been completed by ${memberText}`)
+            .catch(() => {});
         }
 
         // DELETE RAID CHANNEL
-
         await raidChannel.delete().catch(() => {});
-
       } catch (err) {
-
         console.log(err);
       }
     }
@@ -203,13 +174,10 @@ client.on("messageCreate", async (message) => {
 
     return;
   }
-
 });
 
 // ================= BUTTONS =================
-
 client.on(Events.InteractionCreate, async (interaction) => {
-
   if (!interaction.isButton()) return;
 
   const user = interaction.user;
@@ -218,15 +186,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // =================================================
   // START SURVEY BUTTON
   // =================================================
-
   if (interaction.customId === "start_survey") {
-
     const existing = guild.channels.cache.find(
       c => c.name === `survey-${user.username}`
     );
 
     if (existing) {
-
       return interaction.reply({
         content: `Here is your survey channel: ${existing}`,
         ephemeral: true
@@ -241,7 +206,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           id: guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
-
         {
           id: user.id,
           allow: [
@@ -250,7 +214,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             PermissionsBitField.Flags.ReadMessageHistory
           ]
         },
-
         {
           id: client.user.id,
           allow: [
@@ -263,7 +226,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
 
     // SEND CHANNEL LINK
-
     await interaction.reply({
       content: `Here is your survey channel: ${surveyChannel}`,
       ephemeral: true
@@ -272,12 +234,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // =================================================
     // QUESTIONS
     // =================================================
-
     const ask = async (question) => {
-
-      await surveyChannel.send(
-        `<@${user.id}> ${question}`
-      );
+      await surveyChannel.send(`<@${user.id}> ${question}`);
 
       const collected = await surveyChannel.awaitMessages({
         filter: m => m.author.id === user.id,
@@ -288,22 +246,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return collected.first()?.content || "Unknown";
     };
 
-    const hostRaw =
-      await ask("1. Can you be the Host?");
-
-    const packageRaw =
-      await ask("2. How many Raids do you need? (Max 3 per survey)");
-
-    const raidRaw =
-      await ask("3. Choose a Raid Fruit");
-
-    const robloxRaw =
-      await ask("4. What is your Roblox Username?");
+    const hostRaw = await ask("1. Can you be the Host?");
+    const packageRaw = await ask(
+      "2. How many Raids do you need? (Max 3 per survey)"
+    );
+    const raidRaw = await ask("3. Choose a Raid Fruit");
+    const robloxRaw = await ask("4. What is your Roblox Username?");
 
     // =================================================
     // ADD TO QUEUE
     // =================================================
-
     const newEntry = {
       userId: user.id,
       hostRaw,
@@ -326,13 +278,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     return;
   }
-
 });
 
 // ================= UPDATE STATS =================
-
 async function updateStats(guild, entry) {
-
   const channel = guild.channels.cache.find(
     c => c.name === QUEUE_CHANNEL_NAME
   );
@@ -340,56 +289,26 @@ async function updateStats(guild, entry) {
   if (!channel) return;
 
   try {
-     // Placeholder logic to keep script valid
-     console.log("Stats update triggered.");
+    console.log("Stats update triggered.");
   } catch (err) {
-     console.error("Stats update failed:", err);
+    console.error("Stats update failed:", err);
   }
 }
 
-// ================= ULTRA DEBUGS BLOCK =================
-console.log("=========================================");
-console.log("      🚀 ULTRA ENV VARIABLE SCANNER 🚀   ");
-console.log("=========================================");
-console.log("Is process.env completely missing?:", typeof process.env === 'undefined');
-
-// Check every common spelling for your token key
-console.log("🔍 Scanning for token configurations...");
-console.log("1. Type of process.env.token (lowercase):", typeof process.env.token);
-console.log("2. Type of process.env.TOKEN (uppercase):", typeof process.env.TOKEN);
-console.log("3. Type of process.env.DISCORD_TOKEN     :", typeof process.env.DISCORD_TOKEN);
-console.log("4. Type of process.env.BOT_TOKEN         :", typeof process.env.BOT_TOKEN);
-
-// Print all active environment key names so you see exactly what Render is giving the script
-if (typeof process.env !== 'undefined') {
-  console.log("\n📦 Listing ALL active key names inside Render's memory:");
-  const activeKeys = Object.keys(process.env).filter(k => !k.startsWith("npm_"));
-  console.log(JSON.stringify(activeKeys));
-}
-
-console.log("=========================================");
-
-// This fallback chain tries to catch whatever key Render has stored
-const finalToken = process.env.token || process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
+// ================= LOGIN TO DISCORD =================
+const finalToken =
+  process.env.DISCORD_TOKEN ||
+  process.env.TOKEN ||
+  process.env.BOT_TOKEN ||
+  process.env.token;
 
 if (!finalToken) {
-  console.log("❌ REASON FOR CRASH: Render did not give ANY token to your app.");
+  console.error(
+    "❌ CRITICAL ERROR: Could not find your token variable! Make sure it is set in Render Environment Variables."
+  );
 } else {
-  console.log(`✅ Success! Found a token string with a length of ${finalToken.length} characters.`);
-}
-console.log("=========================================");
-// This fallback chain tries to catch whatever key Render has stored
-const finalToken = process.env.token || process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
-
-if (!finalToken) {
-  console.log("❌ REASON FOR CRASH: Render did not give ANY token to your app.");
-} else {
-  console.log(`✅ Success! Found a token string with a length of ${finalToken.length} characters.`);
-  
-  // ADD THIS LINE TO ACTUALLY LOG THE BOT IN:
-  client.login(finalToken).catch(err => {
+  console.log(`✅ Token detected (${finalToken.length} chars). Connecting to Discord...`);
+  client.login(finalToken).catch((err) => {
     console.error("❌ LOGIN FAILED:", err.message);
   });
 }
-console.log("=========================================");
-
