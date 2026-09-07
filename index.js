@@ -297,10 +297,10 @@ async function updateStats(guild, entry) {
 
 // ================= LOGIN TO DISCORD =================
 const finalToken =
+  process.env.token ||
   process.env.DISCORD_TOKEN ||
   process.env.TOKEN ||
-  process.env.BOT_TOKEN ||
-  process.env.token;
+  process.env.BOT_TOKEN;
 
 if (!finalToken) {
   console.error(
