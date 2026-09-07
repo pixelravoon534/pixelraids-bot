@@ -378,4 +378,18 @@ if (!finalToken) {
   console.log(`✅ Success! Found a token string with a length of ${finalToken.length} characters.`);
 }
 console.log("=========================================");
+// This fallback chain tries to catch whatever key Render has stored
+const finalToken = process.env.token || process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
+
+if (!finalToken) {
+  console.log("❌ REASON FOR CRASH: Render did not give ANY token to your app.");
+} else {
+  console.log(`✅ Success! Found a token string with a length of ${finalToken.length} characters.`);
+  
+  // ADD THIS LINE TO ACTUALLY LOG THE BOT IN:
+  client.login(finalToken).catch(err => {
+    console.error("❌ LOGIN FAILED:", err.message);
+  });
+}
+console.log("=========================================");
 
